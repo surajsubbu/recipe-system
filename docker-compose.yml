@@ -1,0 +1,245 @@
+# ─── Host port map (edit left-hand numbers if anything conflicts) ─────────────
+#   postgres  → localhost:5433   (5432 often taken by local postgres)
+#   redis     → localhost:6380   (6379 often taken by local redis)
+#   backend   → localhost:8001   (8000 often taken by other dev servers)
+#   flower    → localhost:5555
+#   ollama    → localhost:11434
+#   frontend  → localhost:3001   (3000 often taken by other Next.js apps)
+#   n8n       → localhost:5678
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  # ─── Data layer ────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: recipe_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-recipes}
+      POSTGRES_USER: ${POSTGRES_USER:-recipeuser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-recipepass}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db:/docker-entrypoint-initdb.d
+    ports:
+      - "5433:5432"
+    networks:
+      - recipe_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-recipeuser} -d ${POSTGRES_DB:-recipes}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: recipe_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6380:6379"
+    networks:
+      - recipe_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── Backend ────────────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: recipe_backend
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-recipeuser}:${POSTGRES_PASSWORD:-recipepass}@postgres:5432/${POSTGRES_DB:-recipes}
+      REDIS_URL: redis://redis:6379/0
+      OLLAMA_BASE_URL: http://ollama:11434
+    volumes:
+      - ./backend:/app
+      - whisper_models:/root/.cache/whisper
+    ports:
+      - "8001:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - recipe_net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  celery_worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: recipe_celery
+    restart: unless-stopped
+    # Handle all queues: ingest jobs, maintenance tasks, and default
+    command: watchfiles --filter python 'celery -A app.worker worker --concurrency=4 --loglevel=info -Q ingest,maintenance,celery' /app/app
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-recipeuser}:${POSTGRES_PASSWORD:-recipepass}@postgres:5432/${POSTGRES_DB:-recipes}
+      REDIS_URL: redis://redis:6379/0
+      OLLAMA_BASE_URL: http://ollama:11434
+    volumes:
+      - ./backend:/app
+      - whisper_models:/root/.cache/whisper
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - recipe_net
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.worker status 2>&1 | grep -qE 'online|OK'"]
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 60s
+
+  celery_beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: recipe_celery_beat
+    restart: unless-stopped
+    command: celery -A app.worker beat --loglevel=info --scheduler celery.beat.PersistentScheduler
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-recipeuser}:${POSTGRES_PASSWORD:-recipepass}@postgres:5432/${POSTGRES_DB:-recipes}
+      REDIS_URL: redis://redis:6379/0
+      OLLAMA_BASE_URL: http://ollama:11434
+    volumes:
+      - ./backend:/app
+      - celery_beat_data:/var/run/celery
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - recipe_net
+
+  flower:
+    image: mher/flower:2.0
+    container_name: recipe_flower
+    restart: unless-stopped
+    command: >
+      celery
+      --broker=redis://redis:6379/0
+      flower
+      --port=5555
+      --basic_auth=${FLOWER_USER:-admin}:${FLOWER_PASSWORD:-flowerpass}
+    ports:
+      - "5555:5555"
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - recipe_net
+
+  # ─── AI ─────────────────────────────────────────────────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    container_name: recipe_ollama
+    restart: unless-stopped
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "11434:11434"
+    networks:
+      - recipe_net
+
+  # ─── Frontend ───────────────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: recipe_frontend
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Browser calls go to host port 8001; inter-container calls use Docker network
+      NEXT_PUBLIC_BACKEND_URL: ${NEXT_PUBLIC_BACKEND_URL:-http://localhost:8001}
+      # Port must match the external port so Clerk's self-referencing handshake works
+      PORT: "3001"
+      # Enable polling for file watcher — required on Windows Docker Desktop
+      WATCHPACK_POLLING: "true"
+    volumes:
+      - ./frontend:/app          # hot-reload source files
+      - /app/node_modules        # keep container's node_modules isolated
+      - /app/.next               # keep Next.js build cache isolated
+    ports:
+      - "3001:3001"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - recipe_net
+
+  # ─── Automation ─────────────────────────────────────────────────────────────
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: recipe_n8n
+    restart: unless-stopped
+    environment:
+      N8N_BASIC_AUTH_ACTIVE: "true"
+      N8N_BASIC_AUTH_USER: ${N8N_USER:-admin}
+      N8N_BASIC_AUTH_PASSWORD: ${N8N_PASSWORD:-changeme_n8n}
+      N8N_HOST: ${N8N_HOST:-n8n.yourdomain.com}
+      N8N_PORT: 5678
+      N8N_PROTOCOL: https
+      WEBHOOK_URL: https://${N8N_HOST:-n8n.yourdomain.com}/
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: postgres
+      DB_POSTGRESDB_PORT: 5432
+      DB_POSTGRESDB_DATABASE: n8n
+      DB_POSTGRESDB_USER: ${POSTGRES_USER:-recipeuser}
+      DB_POSTGRESDB_PASSWORD: ${POSTGRES_PASSWORD:-recipepass}
+    volumes:
+      - n8n_data:/home/node/.n8n
+    ports:
+      - "5678:5678"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - recipe_net
+
+  # ─── Tunnel ─────────────────────────────────────────────────────────────────
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: recipe_cloudflared
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
+    networks:
+      - recipe_net
+    depends_on:
+      - frontend
+      - backend
+      - n8n
+
+# ─── Networks & Volumes ────────────────────────────────────────────────────────
+networks:
+  recipe_net:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  ollama_data:
+  n8n_data:
+  whisper_models:
+  celery_beat_data:

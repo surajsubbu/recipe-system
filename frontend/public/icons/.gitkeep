@@ -1,0 +1,7 @@
+# Place your PWA icons here:
+#   icon-180x180.png  (Apple touch icon)
+#   icon-192x192.png  (Android / PWA install)
+#   icon-512x512.png  (Splash screen / install)
+#
+# Quick generation:
+#   npx pwa-asset-generator ./your-logo.svg ./public/icons --manifest ./public/manifest.json

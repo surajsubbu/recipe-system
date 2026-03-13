@@ -1,0 +1,95 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── CSS custom properties (dark theme tokens) ────────────────────────────── */
+:root {
+  --background:         220 13% 10%;   /* gray-950  */
+  --foreground:         210 40% 98%;   /* gray-50   */
+  --card:               220 13% 14%;   /* gray-900  */
+  --card-foreground:    210 40% 98%;
+  --border:             217 19% 20%;   /* gray-800  */
+  --input:              217 19% 20%;
+  --primary:            25 95% 53%;    /* orange-500 — cook / CTA colour */
+  --primary-foreground: 0 0% 100%;
+  --muted:              217 19% 20%;
+  --muted-foreground:   215 16% 57%;   /* gray-400  */
+  --accent:             217 33% 17%;
+  --destructive:        0 84% 60%;     /* red-500   */
+  --radius:             0.625rem;
+}
+
+/* ─── Base resets ───────────────────────────────────────────────────────────── */
+@layer base {
+  * {
+    @apply border-border;
+    /* Smooth scroll for anchor links and step navigation */
+    scroll-behavior: smooth;
+  }
+
+  html {
+    /* Prevent font size inflation on mobile after orientation change */
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: var(--font-inter, system-ui, sans-serif);
+    /* Account for iOS home bar on standalone PWA */
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  /* WCAG 2.5.5 — minimum 44 × 44 px interactive targets */
+  button,
+  a,
+  [role="button"],
+  input[type="checkbox"],
+  input[type="radio"] {
+    @apply min-h-touch min-w-touch;
+  }
+
+  /* Remove spinners from number inputs */
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+}
+
+/* ─── Utility classes ───────────────────────────────────────────────────────── */
+@layer utilities {
+  /* Full-bleed safe-area padding (navigation bars) */
+  .px-safe {
+    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
+  }
+
+  /* Bottom padding for fixed nav bar */
+  .pb-nav {
+    padding-bottom: calc(4rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* Screen Wake Lock supported badge */
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  /* Skeleton shimmer for loading states */
+  .skeleton {
+    @apply animate-pulse rounded-md bg-muted;
+  }
+
+  /* Hide scrollbar but keep scroll functionality */
+  .scrollbar-none {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Safe area top padding (notch) */
+  .pt-safe {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+}

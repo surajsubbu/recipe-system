@@ -1,0 +1,48 @@
+# ─── Secrets (never commit) ───────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+
+# ─── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+
+# ─── Alembic ──────────────────────────────────────────────────────────────────
+# Keep migrations but not generated output
+backend/alembic/versions/__pycache__/
+
+# ─── Node / Next.js ───────────────────────────────────────────────────────────
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.npm
+
+# ─── Docker ───────────────────────────────────────────────────────────────────
+# Don't commit local docker data dirs if any are bind-mounted
+init-db/*.sql.local
+
+# ─── OS ───────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ─── Editors ──────────────────────────────────────────────────────────────────
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+*~
+
+# ─── Logs ─────────────────────────────────────────────────────────────────────
+*.log
+celerybeat-schedule
+celerybeat.pid
