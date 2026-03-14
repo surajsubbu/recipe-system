@@ -11,7 +11,7 @@ import { ServingsScaler } from "@/components/ServingsScaler";
 import { IngredientChecklist } from "@/components/IngredientChecklist";
 import { StepTimer } from "@/components/StepTimer";
 import { PageSpinner } from "@/components/LoadingSpinner";
-import { cn, formatCookTime, formatDate, totalTime } from "@/lib/utils";
+import { cn, formatCookTime, formatDate, totalTime, convertUnit, type UnitSystem } from "@/lib/utils";
 import {
   ArrowLeftIcon,
   ClockIcon,
@@ -34,6 +34,7 @@ export default function RecipeDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [multiplier, setMultiplier] = useState(1);
+  const [unitSystem, setUnitSystem] = useState<UnitSystem>("original");
   const [toast, setToast] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [mealModalOpen, setMealModalOpen] = useState(false);
@@ -101,9 +102,9 @@ export default function RecipeDetailPage() {
       {/* Back button */}
       <div className="px-safe sticky top-0 z-10 flex items-center gap-2 border-b border-border bg-background/80 px-4 py-3 backdrop-blur-sm">
         <button
-          onClick={() => router.back()}
+          onClick={() => router.push("/recipes")}
           className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-          aria-label="Go back"
+          aria-label="Go back to recipes"
         >
           <ArrowLeftIcon className="h-4 w-4" aria-hidden="true" />
           Back
@@ -228,14 +229,38 @@ export default function RecipeDetailPage() {
           </Link>
         </div>
 
-        {/* Servings scaler */}
-        {recipe.servings && (
-          <ServingsScaler
-            original={recipe.servings}
-            onChange={setMultiplier}
-            className="mb-6"
-          />
-        )}
+        {/* Servings scaler & unit system */}
+        <div className="mb-6 space-y-4">
+          {recipe.servings && (
+            <ServingsScaler
+              original={recipe.servings}
+              onChange={setMultiplier}
+            />
+          )}
+          {recipe.ingredients.length > 0 && (
+            <div>
+              <label className="mb-2 block text-xs font-medium text-muted-foreground">
+                Units
+              </label>
+              <div className="flex gap-2">
+                {(["original", "metric", "imperial"] as const).map((sys) => (
+                  <button
+                    key={sys}
+                    onClick={() => setUnitSystem(sys)}
+                    className={cn(
+                      "rounded-lg px-3 py-2 text-xs font-medium transition-colors",
+                      unitSystem === sys
+                        ? "bg-primary text-primary-foreground"
+                        : "border border-border bg-card text-muted-foreground hover:border-primary/50"
+                    )}
+                  >
+                    {sys === "original" ? "Original" : sys === "metric" ? "Metric" : "Imperial"}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* Source link */}
         {recipe.source_url && (
@@ -259,6 +284,7 @@ export default function RecipeDetailPage() {
             <IngredientChecklist
               ingredients={recipe.ingredients}
               multiplier={multiplier}
+              unitSystem={unitSystem}
             />
           </section>
         )}
@@ -289,6 +315,20 @@ export default function RecipeDetailPage() {
                 </li>
               ))}
             </ol>
+          </section>
+        )}
+
+        {/* Video transcript */}
+        {recipe.transcript && (
+          <section className="mb-8">
+            <h2 className="mb-3 text-lg font-semibold text-foreground">
+              Video Transcript
+            </h2>
+            <div className="rounded-xl bg-muted p-4">
+              <p className="text-sm leading-relaxed text-muted-foreground whitespace-pre-wrap">
+                {recipe.transcript}
+              </p>
+            </div>
           </section>
         )}
 

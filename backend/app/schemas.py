@@ -109,6 +109,7 @@ class RecipeOut(RecipeBase):
     id: int
     created_at: datetime
     updated_at: Optional[datetime] = None
+    transcript: Optional[str] = None
     ingredients: List[IngredientOut] = []
     steps: List[StepOut] = []
     tags: List[TagOut] = []

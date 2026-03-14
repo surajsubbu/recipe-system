@@ -48,6 +48,7 @@ class RecipeData:
     cook_time: Optional[int] = None   # minutes
     prep_time: Optional[int] = None   # minutes
     servings: Optional[int] = None
+    transcript: Optional[str] = None   # video transcript (YouTube recipes)
     ingredients: list[IngredientData] = field(default_factory=list)
     steps: list[StepData] = field(default_factory=list)
     tags: list[str] = field(default_factory=list)

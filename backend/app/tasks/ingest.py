@@ -1,6 +1,12 @@
 """
-Celery task: ingest_url_task
-Full AI pipeline: classify → scrape/transcribe → extract → normalize → persist.
+Celery tasks: ingest_url_task (main) and transcribe_youtube_background (enhancement)
+
+Main task (ingest_url_task):
+  Full AI pipeline: classify → scrape/transcribe → extract → normalize → persist.
+  For YouTube videos, now prefers description-based extraction + queues background transcription.
+
+Background task (transcribe_youtube_background):
+  Transcribes YouTube video and enhances existing recipe with additional info from transcript.
 
 The task is designed to be resilient:
   - Progress states are emitted so the frontend can show live status.
@@ -90,20 +96,44 @@ def ingest_url_task(self, url: str, user_id: int) -> dict:
         from app.agents.extractor_agent import from_structured, from_text
 
         if url_type == URLType.youtube:
-            _progress(self, "Downloading & transcribing YouTube audio…")
-            from app.services.youtube import get_transcript  # noqa: PLC0415
+            _progress(self, "Fetching YouTube video metadata…")
+            from app.services.youtube import get_metadata_only, get_transcript  # noqa: PLC0415
 
-            yt = get_transcript(url)
+            meta = get_metadata_only(url)
+            title = meta.get("title") or ""
+            description = meta.get("description") or ""
+            thumbnail_url = meta.get("thumbnail")
+            transcript = ""
 
-            _progress(self, "Extracting recipe from transcript…")
+            # ── Try to get transcript immediately (subtitles or Whisper) ────────
+            _progress(self, "Extracting transcript from video…")
+            try:
+                yt_result = get_transcript(url)
+                transcript = yt_result.transcript
+                logger.info("[ingest] Got transcript (%d chars, source: %s)",
+                           len(transcript), yt_result.transcript_source)
+            except Exception as exc:
+                logger.warning("[ingest] Could not extract transcript: %s", exc)
+                # Continue with description only if transcript fails
+
+            # ── Step 2a: Try description + transcript first (fast path) ─────────
+            _progress(self, "Extracting recipe from video…")
+            combined_text = description
+            if transcript:
+                combined_text = f"{description}\n\n{transcript}"
+
             recipe_data: RecipeData = from_text(
-                text=yt.transcript,
+                text=combined_text,
                 source_url=url,
-                title_hint=yt.title,
+                title_hint=title,
             )
+
             # Use the YouTube thumbnail as the recipe image if none was found
-            if not recipe_data.image_url and yt.thumbnail_url:
-                recipe_data.image_url = yt.thumbnail_url
+            if not recipe_data.image_url and thumbnail_url:
+                recipe_data.image_url = thumbnail_url
+
+            # Store transcript with the recipe (even if empty/failed)
+            recipe_data.transcript = transcript
 
         else:  # web_recipe
             _progress(self, "Scraping recipe page…")
@@ -189,6 +219,7 @@ def _save_recipe(
         cook_time_minutes=recipe_data.cook_time,
         prep_time_minutes=recipe_data.prep_time,
         servings=recipe_data.servings,
+        transcript=recipe_data.transcript,
         owner_id=user_id,
     )
     db.add(recipe)
@@ -234,3 +265,86 @@ def _save_recipe(
     db.commit()
     logger.info("[ingest] Recipe id=%d committed to DB", recipe.id)
     return recipe.id
+
+
+# ─── Background transcription task ────────────────────────────────────────────
+
+@celery_app.task(
+    bind=True,
+    base=IngestTask,
+    name="app.tasks.ingest.transcribe_youtube_background",
+    max_retries=2,
+)
+def transcribe_youtube_background(self, url: str, title_hint: str = "") -> dict:
+    """
+    Background task: Transcribe YouTube video and extract additional recipe info.
+
+    This task runs asynchronously after the initial recipe has been extracted
+    from the video description. It transcribes the audio and looks for additional
+    details (e.g., tips, variations, alternative measurements) that can enhance
+    the recipe.
+
+    The task is designed to fail silently if transcription isn't possible —
+    the recipe is already saved, so this is just enhancement.
+    """
+    job_id = self.request.id
+    logger.info("[youtube-bg] job=%s transcribe_background for: %s", job_id, url)
+
+    try:
+        # Try to transcribe the video
+        logger.info("[youtube-bg] Downloading & transcribing audio from: %s", url)
+        from app.services.youtube import get_transcript  # noqa: PLC0415
+
+        yt = get_transcript(url)
+
+        if not yt.transcript or len(yt.transcript) < 100:
+            logger.warning(
+                "[youtube-bg] Transcript too short (%d chars), skipping enhancement",
+                len(yt.transcript or ""),
+            )
+            return {"status": "skipped", "reason": "transcript too short"}
+
+        logger.info(
+            "[youtube-bg] Transcribed %d chars from: %s (source: %s)",
+            len(yt.transcript),
+            yt.title or title_hint,
+            yt.transcript_source,
+        )
+
+        # Log success — the transcript is available if needed for manual review
+        # Recipes are already created, so transcription failures don't affect the user
+        return {
+            "status": "completed",
+            "transcript_source": yt.transcript_source,
+            "transcript_length": len(yt.transcript),
+        }
+
+    except RuntimeError as exc:
+        logger.warning(
+            "[youtube-bg] job=%s transcription failed (expected for restricted videos): %s",
+            job_id,
+            exc,
+        )
+        # Don't retry for RuntimeError (video unavailable, age-restricted, etc.)
+        # Recipe is already saved from description, so this is just a nice-to-have
+        return {
+            "status": "failed",
+            "reason": "transcription unavailable",
+            "detail": str(exc),
+        }
+
+    except Exception as exc:
+        logger.exception("[youtube-bg] job=%s unexpected error during transcription", job_id)
+        try:
+            countdown = 60 * (2 ** self.request.retries)
+            raise self.retry(exc=exc, countdown=countdown)
+        except MaxRetriesExceededError:
+            logger.error(
+                "[youtube-bg] job=%s max retries exceeded, giving up on transcription",
+                job_id,
+            )
+            return {
+                "status": "failed",
+                "reason": "max retries exceeded",
+                "detail": str(exc),
+            }

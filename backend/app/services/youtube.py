@@ -51,6 +51,18 @@ class YoutubeResult:
 
 # ─── Public API ───────────────────────────────────────────────────────────────
 
+def get_metadata_only(url: str) -> dict:
+    """
+    Fetch video metadata (title, description, thumbnail, duration, channel).
+    Fast path — no subtitle/audio download required.
+    Raises RuntimeError if video is unreachable.
+    """
+    logger.info("[youtube] Fetching metadata: %s", url)
+    meta = _get_metadata(url)
+    _assert_supported(meta)
+    return meta
+
+
 def get_transcript(url: str) -> YoutubeResult:
     """
     Extract transcript from any YouTube URL.
@@ -277,6 +289,7 @@ def _download_audio(url: str, output_dir: str) -> str:
     ]
 
     info = None
+    last_error = None
     for fmt in format_attempts:
         try:
             opts = {**base_opts, "format": fmt}
@@ -284,11 +297,21 @@ def _download_audio(url: str, output_dir: str) -> str:
                 info = ydl.extract_info(url, download=True)
             break
         except yt_dlp.utils.DownloadError as exc:
+            last_error = exc
             logger.warning("[youtube] Format %r failed: %s — trying next", fmt, exc)
+            continue
+        except Exception as exc:
+            last_error = exc
+            logger.warning("[youtube] Format %r unexpected error: %s — trying next", fmt, exc)
             continue
 
     if info is None:
-        raise RuntimeError(f"Audio download failed for all format attempts: {url}")
+        error_msg = (
+            f"Audio download failed for all format attempts: {url}\n"
+            f"Last error: {last_error}\n"
+            f"Video may be age-restricted, geo-blocked, or have no audio track."
+        )
+        raise RuntimeError(error_msg)
 
     video_id = info.get("id", "")
     # Primary expected path

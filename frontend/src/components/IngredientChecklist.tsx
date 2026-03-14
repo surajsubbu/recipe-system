@@ -1,19 +1,21 @@
 "use client";
 
 import { useState } from "react";
-import { cn, displayAmount, scaleAmount } from "@/lib/utils";
+import { cn, displayAmount, scaleAmount, convertUnit, type UnitSystem } from "@/lib/utils";
 import type { Ingredient } from "@/lib/types";
 import { CheckIcon } from "@heroicons/react/24/outline";
 
 interface IngredientChecklistProps {
   ingredients: Ingredient[];
   multiplier?: number; // servings scale factor (1 = original)
+  unitSystem?: UnitSystem; // unit system (original/metric/imperial)
   className?: string;
 }
 
 export function IngredientChecklist({
   ingredients,
   multiplier = 1,
+  unitSystem = "original",
   className,
 }: IngredientChecklistProps) {
   const [checked, setChecked] = useState<Set<number>>(new Set());
@@ -32,7 +34,8 @@ export function IngredientChecklist({
       {ingredients.map((ing) => {
         const isChecked = checked.has(ing.id);
         const scaledAmount = scaleAmount(ing.amount, multiplier);
-        const amountStr = displayAmount(scaledAmount);
+        const converted = convertUnit(scaledAmount, ing.unit, unitSystem);
+        const amountStr = displayAmount(converted.amount);
 
         return (
           <li key={ing.id}>
@@ -69,8 +72,8 @@ export function IngredientChecklist({
                     {amountStr}{" "}
                   </span>
                 )}
-                {ing.unit && (
-                  <span className="text-muted-foreground">{ing.unit} </span>
+                {converted.unit && (
+                  <span className="text-muted-foreground">{converted.unit} </span>
                 )}
                 <span>{ing.name}</span>
               </span>

@@ -1,10 +1,11 @@
 "use client";
 
+import React from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { cn, formatCookTime, totalTime } from "@/lib/utils";
+import { cn, formatCookTime, totalTime, isYouTubeUrl } from "@/lib/utils";
 import type { RecipeSummary } from "@/lib/types";
-import { ClockIcon, FireIcon } from "@heroicons/react/24/outline";
+import { ClockIcon, FireIcon, GlobeAltIcon } from "@heroicons/react/24/outline";
 
 interface RecipeCardProps {
   recipe: RecipeSummary;
@@ -56,6 +57,20 @@ export function RecipeCard({ recipe, className }: RecipeCardProps) {
             )}
           >
             {recipe.difficulty}
+          </span>
+        )}
+
+        {/* Source badge */}
+        {recipe.source_url && (
+          <span
+            className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-card/80 backdrop-blur-sm"
+            title={isYouTubeUrl(recipe.source_url) ? "From YouTube" : "From website"}
+          >
+            {isYouTubeUrl(recipe.source_url) ? (
+              <YoutubeIcon />
+            ) : (
+              <FaviconIcon url={recipe.source_url} />
+            )}
           </span>
         )}
       </div>
@@ -122,4 +137,49 @@ export function RecipeCardSkeleton() {
       </div>
     </div>
   );
+}
+
+// ─── Icon components ──────────────────────────────────────────────────────────
+
+function YoutubeIcon() {
+  return (
+    <svg
+      className="h-5 w-5"
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden="true"
+      style={{ color: "#ef4444" }}
+    >
+      <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
+    </svg>
+  );
+}
+
+function FaviconIcon({ url }: { url: string }) {
+  const [faviconUrl, setFaviconUrl] = React.useState<string>("");
+
+  React.useEffect(() => {
+    try {
+      const urlObj = new URL(url);
+      const domain = urlObj.origin;
+      // Try multiple favicon sources
+      const favicon = `${domain}/favicon.ico`;
+      setFaviconUrl(favicon);
+    } catch {
+      // Fallback to globe icon if URL parsing fails
+    }
+  }, [url]);
+
+  if (faviconUrl) {
+    return (
+      <img
+        src={faviconUrl}
+        alt="Website favicon"
+        className="h-4 w-4"
+        onError={() => <GlobeAltIcon className="h-4 w-4 text-blue-400" aria-hidden="true" />}
+      />
+    );
+  }
+
+  return <GlobeAltIcon className="h-4 w-4 text-blue-400" aria-hidden="true" />;
 }

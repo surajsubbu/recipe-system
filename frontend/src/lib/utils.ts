@@ -195,3 +195,86 @@ export function difficultyColor(
       return "text-muted";
   }
 }
+
+// ─── Unit conversion (Original/Metric/Imperial) ────────────────────────────────
+
+export type UnitSystem = "original" | "metric" | "imperial";
+
+interface UnitConversion {
+  amount: number;
+  unit: string;
+}
+
+// Metric conversions (common cooking units to grams/ml)
+const METRIC_CONVERSIONS: Record<string, number> = {
+  // Weight (to grams)
+  "oz": 28.35, "ounce": 28.35, "ounces": 28.35,
+  "lb": 453.6, "lbs": 453.6, "pound": 453.6, "pounds": 453.6,
+  "g": 1, "gram": 1, "grams": 1, "kg": 1000, "kilogram": 1000,
+
+  // Volume (to ml)
+  "tsp": 5, "teaspoon": 5, "teaspoons": 5,
+  "tbsp": 15, "tablespoon": 15, "tablespoons": 15,
+  "fl oz": 30, "fl.oz": 30, "fluid ounce": 30,
+  "cup": 240, "cups": 240, "c": 240,
+  "ml": 1, "milliliter": 1, "milliliters": 1,
+  "l": 1000, "liter": 1000, "liters": 1000,
+  "pint": 473, "quart": 946,
+};
+
+// Imperial conversions (metric back to imperial)
+const IMPERIAL_CONVERSIONS: Record<string, number> = {
+  // Weight (from grams)
+  "g": 0.0353, "gram": 0.0353, "grams": 0.0353,
+  "kg": 2.205, "kilogram": 2.205,
+
+  // Volume (from ml)
+  "ml": 0.0338, "milliliter": 0.0338, "milliliters": 0.0338,
+  "l": 33.814, "liter": 33.814, "liters": 33.814,
+};
+
+/**
+ * Convert ingredient unit from one system to another.
+ * Attempts to convert common cooking units.
+ * Returns original if conversion not possible.
+ */
+export function convertUnit(
+  amount: number | null | undefined,
+  originalUnit: string,
+  toSystem: UnitSystem
+): UnitConversion {
+  if (amount == null || !originalUnit) {
+    return { amount, unit: originalUnit };
+  }
+
+  const unit = originalUnit.toLowerCase().trim();
+
+  if (toSystem === "original") {
+    return { amount, unit: originalUnit };
+  }
+
+  if (toSystem === "metric") {
+    // Try to convert to metric (grams or ml)
+    const grams = METRIC_CONVERSIONS[unit];
+    if (grams) {
+      return {
+        amount: parseFloat((amount * grams).toFixed(1)),
+        unit: unit.includes("cup") || unit.includes("tbsp") || unit.includes("tsp") || unit.includes("fl") ? "ml" : "g",
+      };
+    }
+  }
+
+  if (toSystem === "imperial") {
+    // Try to convert to imperial (oz or fl oz)
+    const factor = IMPERIAL_CONVERSIONS[unit];
+    if (factor) {
+      return {
+        amount: parseFloat((amount * factor).toFixed(2)),
+        unit: unit.includes("ml") || unit.includes("l") ? "fl oz" : "oz",
+      };
+    }
+  }
+
+  // No conversion found, return original
+  return { amount, unit: originalUnit };
+}

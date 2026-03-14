@@ -94,7 +94,7 @@ export const recipesApi = {
     if (params.page) qs.set("page", String(params.page));
     if (params.page_size) qs.set("page_size", String(params.page_size));
     if (params.search) qs.set("search", params.search);
-    if (params.tag) qs.set("tag", params.tag);
+    if (params.tag) qs.append("tags", params.tag);  // backend expects "tags" query param
     return apiFetch<PaginatedRecipes>(
       `/recipes${qs.toString() ? `?${qs}` : ""}`,
       token

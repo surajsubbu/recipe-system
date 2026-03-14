@@ -54,6 +54,7 @@ export interface Recipe {
   calories_per_serving: number | null;
   cuisine: string | null;
   difficulty: string | null;
+  transcript: string | null;
   owner_id: number;
   created_at: string; // ISO datetime
   updated_at: string; // ISO datetime

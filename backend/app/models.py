@@ -91,6 +91,7 @@ class Recipe(Base):
     calories_per_serving = Column(Integer)
     cuisine              = Column(String(100))
     difficulty           = Column(String(50))   # "easy" | "medium" | "hard"
+    transcript           = Column(Text, nullable=True)  # video transcript (YouTube recipes)
     owner_id             = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     created_at           = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at           = Column(DateTime(timezone=True), onupdate=func.now())
