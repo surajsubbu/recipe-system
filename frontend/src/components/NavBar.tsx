@@ -6,20 +6,22 @@ import { useState } from "react";
 import { cn } from "@/lib/utils";
 import {
   BookOpenIcon,
-  PlusCircleIcon,
-  ShoppingCartIcon,
-  CalendarIcon,
-  ShieldCheckIcon,
+  HomeIcon,
+  BeakerIcon,
+  BookmarkIcon,
   UserCircleIcon,
   XMarkIcon,
   ArrowRightStartOnRectangleIcon,
+  ShoppingCartIcon,
+  CalendarIcon,
+  PlusCircleIcon,
+  ShieldCheckIcon,
 } from "@heroicons/react/24/outline";
 import {
   BookOpenIcon as BookOpenSolid,
-  PlusCircleIcon as PlusCircleSolid,
-  ShoppingCartIcon as ShoppingCartSolid,
-  CalendarIcon as CalendarSolid,
-  ShieldCheckIcon as ShieldCheckSolid,
+  HomeIcon as HomeSolid,
+  BeakerIcon as BeakerSolid,
+  BookmarkIcon as BookmarkSolid,
   UserCircleIcon as UserCircleSolid,
 } from "@heroicons/react/24/solid";
 import { useUser, useClerk } from "@clerk/nextjs";
@@ -27,37 +29,35 @@ import { useRouter } from "next/navigation";
 
 const NAV_ITEMS = [
   {
+    href: "/",
+    label: "Home",
+    icon: HomeIcon,
+    activeIcon: HomeSolid,
+    isActive: (pathname: string) => pathname === "/",
+  },
+  {
     href: "/recipes",
     label: "Recipes",
     icon: BookOpenIcon,
     activeIcon: BookOpenSolid,
+    isActive: (pathname: string) =>
+      pathname === "/recipes" || pathname.startsWith("/recipe/"),
   },
   {
-    href: "/add",
-    label: "Add",
-    icon: PlusCircleIcon,
-    activeIcon: PlusCircleSolid,
+    href: "/pantry",
+    label: "Pantry",
+    icon: BeakerIcon,
+    activeIcon: BeakerSolid,
+    isActive: (pathname: string) => pathname.startsWith("/pantry"),
   },
   {
-    href: "/shopping-list",
-    label: "Shop",
-    icon: ShoppingCartIcon,
-    activeIcon: ShoppingCartSolid,
-  },
-  {
-    href: "/meal-plan",
-    label: "Plan",
-    icon: CalendarIcon,
-    activeIcon: CalendarSolid,
+    href: "/collections",
+    label: "Saved",
+    icon: BookmarkIcon,
+    activeIcon: BookmarkSolid,
+    isActive: (pathname: string) => pathname.startsWith("/collections"),
   },
 ];
-
-const ADMIN_ITEM = {
-  href: "/admin",
-  label: "Admin",
-  icon: ShieldCheckIcon,
-  activeIcon: ShieldCheckSolid,
-};
 
 export function NavBar() {
   const pathname = usePathname();
@@ -71,7 +71,6 @@ export function NavBar() {
 
   const isAdmin =
     (user?.publicMetadata as { role?: string })?.role === "admin";
-  const items = isAdmin ? [...NAV_ITEMS, ADMIN_ITEM] : NAV_ITEMS;
   const isAccountActive = showAccount;
 
   async function handleSignOut() {
@@ -84,24 +83,21 @@ export function NavBar() {
       {/* ── Bottom Navigation ─────────────────────────────────────────── */}
       <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-card/95 backdrop-blur-sm pb-safe">
         <ul className="flex items-center justify-around px-2">
-          {items.map(({ href, label, icon: Icon, activeIcon: ActiveIcon }) => {
-            const isActive =
-              href === "/recipes"
-                ? pathname === "/recipes" || pathname.startsWith("/recipe/")
-                : pathname.startsWith(href);
+          {NAV_ITEMS.map(({ href, label, icon: Icon, activeIcon: ActiveIcon, isActive }) => {
+            const active = isActive(pathname);
             return (
               <li key={href} className="flex-1">
                 <Link
                   href={href}
                   className={cn(
                     "flex min-h-touch flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-2 text-xs font-medium transition-colors",
-                    isActive
+                    active
                       ? "text-primary"
                       : "text-muted-foreground hover:text-foreground"
                   )}
-                  aria-current={isActive ? "page" : undefined}
+                  aria-current={active ? "page" : undefined}
                 >
-                  {isActive ? (
+                  {active ? (
                     <ActiveIcon className="h-6 w-6" aria-hidden="true" />
                   ) : (
                     <Icon className="h-6 w-6" aria-hidden="true" />
@@ -129,8 +125,7 @@ export function NavBar() {
                 <img
                   src={user.imageUrl}
                   alt={user.fullName ?? "Account"}
-                  className="h-6 w-6 rounded-full object-cover ring-2 ring-transparent"
-                  style={isAccountActive ? { ringColor: "var(--color-primary)" } : {}}
+                  className="h-6 w-6 rounded-full object-cover"
                 />
               ) : isAccountActive ? (
                 <UserCircleSolid className="h-6 w-6" aria-hidden="true" />
@@ -158,7 +153,7 @@ export function NavBar() {
             role="dialog"
             aria-modal="true"
             aria-label="Account"
-            className="fixed bottom-0 left-0 right-0 z-50 rounded-t-2xl border-t border-border bg-card px-4 pb-safe pt-4"
+            className="fixed bottom-0 left-0 right-0 z-50 animate-slide-up rounded-t-2xl border-t border-border bg-card px-4 pb-safe pt-4"
           >
             {/* Handle */}
             <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-muted" />
@@ -203,6 +198,26 @@ export function NavBar() {
                 </div>
               </div>
             )}
+
+            {/* Quick nav links */}
+            <div className="mb-4 space-y-1">
+              {[
+                { href: "/add", label: "Add Recipe", icon: PlusCircleIcon },
+                { href: "/shopping-list", label: "Shopping List", icon: ShoppingCartIcon },
+                { href: "/meal-plan", label: "Meal Plan", icon: CalendarIcon },
+                ...(isAdmin ? [{ href: "/admin", label: "Admin", icon: ShieldCheckIcon }] : []),
+              ].map(({ href, label, icon: Icon }) => (
+                <Link
+                  key={href}
+                  href={href}
+                  onClick={() => setShowAccount(false)}
+                  className="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                >
+                  <Icon className="h-5 w-5" aria-hidden="true" />
+                  {label}
+                </Link>
+              ))}
+            </div>
 
             {/* Sign Out */}
             <button

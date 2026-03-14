@@ -77,6 +77,12 @@ export interface RecipeSummary {
   created_at: string;
 }
 
+export interface CookableRecipe extends RecipeSummary {
+  match_percentage: number
+  matched_ingredients: number
+  total_ingredients: number
+}
+
 export interface PaginatedRecipes {
   items: RecipeSummary[];
   total: number;
@@ -247,6 +253,8 @@ export interface PantryItemCreate {
   category?: string | null;
   expires_on?: string | null;
 }
+
+export type PantryGrouped = Record<string, PantryItem[]>;
 
 export interface PantryItemUpdate {
   quantity?: number | null;

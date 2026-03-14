@@ -28,6 +28,10 @@ const config: Config = {
         "muted-foreground":     "hsl(var(--muted-foreground) / <alpha-value>)",
         accent:      "hsl(var(--accent) / <alpha-value>)",
         destructive: "hsl(var(--destructive) / <alpha-value>)",
+        success: "hsl(var(--success) / <alpha-value>)",
+        "success-foreground": "hsl(var(--success-foreground) / <alpha-value>)",
+        warning: "hsl(var(--warning) / <alpha-value>)",
+        "warning-foreground": "hsl(var(--warning-foreground) / <alpha-value>)",
       },
       borderRadius: {
         lg: "var(--radius)",

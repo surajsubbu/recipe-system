@@ -10,6 +10,7 @@ import type {
   RecipeCreate,
   RecipeUpdate,
   PaginatedRecipes,
+  CookableRecipe,
   Tag,
   IngestJobOut,
   IngestRequest,
@@ -132,6 +133,9 @@ export const recipesApi = {
 
   delete: (id: number, token: string | null): Promise<void> =>
     apiFetch<void>(`/recipes/${id}`, token, { method: "DELETE" }),
+
+  cookable: (token: string | null, limit = 30): Promise<CookableRecipe[]> =>
+    apiFetch<CookableRecipe[]>(`/recipes/cookable?limit=${limit}`, token),
 };
 
 // ─── Ingest ───────────────────────────────────────────────────────────────────

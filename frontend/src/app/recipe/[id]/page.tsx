@@ -5,8 +5,8 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { useAuth, useUser } from "@clerk/nextjs";
-import { recipesApi, shoppingApi, mealPlanApi } from "@/lib/api";
-import type { Recipe, MealType } from "@/lib/types";
+import { recipesApi, shoppingApi, mealPlanApi, collectionsApi } from "@/lib/api";
+import type { Recipe, MealType, Collection } from "@/lib/types";
 import { ServingsScaler } from "@/components/ServingsScaler";
 import { IngredientChecklist } from "@/components/IngredientChecklist";
 import { StepTimer } from "@/components/StepTimer";
@@ -22,6 +22,8 @@ import {
   TrashIcon,
   GlobeAltIcon,
   PencilSquareIcon,
+  BookmarkIcon,
+  XMarkIcon,
 } from "@heroicons/react/24/outline";
 
 export default function RecipeDetailPage() {
@@ -38,6 +40,7 @@ export default function RecipeDetailPage() {
   const [toast, setToast] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [mealModalOpen, setMealModalOpen] = useState(false);
+  const [saveSheetOpen, setSaveSheetOpen] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -205,7 +208,7 @@ export default function RecipeDetailPage() {
         )}
 
         {/* Action buttons */}
-        <div className="mb-6 grid grid-cols-3 gap-2">
+        <div className="mb-6 grid grid-cols-2 gap-2">
           <button
             onClick={addToShopping}
             className="flex min-h-touch flex-col items-center justify-center gap-1 rounded-xl border border-border bg-card p-3 text-xs font-medium text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary"
@@ -219,6 +222,13 @@ export default function RecipeDetailPage() {
           >
             <CalendarIcon className="h-5 w-5" aria-hidden="true" />
             Meal Plan
+          </button>
+          <button
+            onClick={() => setSaveSheetOpen(true)}
+            className="flex min-h-touch flex-col items-center justify-center gap-1 rounded-xl border border-border bg-card p-3 text-xs font-medium text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary"
+          >
+            <BookmarkIcon className="h-5 w-5" aria-hidden="true" />
+            Save
           </button>
           <Link
             href={`/cook/${id}`}
@@ -337,6 +347,18 @@ export default function RecipeDetailPage() {
         </p>
       </div>
 
+      {/* Save to Collection sheet */}
+      {saveSheetOpen && (
+        <SaveToCollectionSheet
+          recipeId={recipe.id}
+          onClose={() => setSaveSheetOpen(false)}
+          onSaved={(msg) => {
+            setSaveSheetOpen(false);
+            showToast(msg);
+          }}
+        />
+      )}
+
       {/* Meal plan modal */}
       {mealModalOpen && (
         <MealPlanModal
@@ -360,6 +382,131 @@ export default function RecipeDetailPage() {
         </div>
       )}
     </div>
+  );
+}
+
+// ─── Save to Collection Sheet ─────────────────────────────────────────────────
+
+function SaveToCollectionSheet({
+  recipeId,
+  onClose,
+  onSaved,
+}: {
+  recipeId: number;
+  onClose: () => void;
+  onSaved: (msg: string) => void;
+}) {
+  const { getToken } = useAuth();
+  const [collections, setCollections] = useState<Collection[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [addedIds, setAddedIds] = useState<Set<number>>(new Set());
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const token = await getToken();
+        const result = await collectionsApi.list(token);
+        setCollections(result.items);
+      } catch {
+        // ignore
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function addToCollection(collectionId: number, collectionName: string) {
+    try {
+      const token = await getToken();
+      await collectionsApi.addRecipe(collectionId, recipeId, token);
+      setAddedIds((prev) => new Set([...prev, collectionId]));
+      onSaved(`Added to "${collectionName}"!`);
+    } catch {
+      onSaved("Failed to save to collection.");
+    }
+  }
+
+  return (
+    <>
+      <div
+        className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Save to Collection"
+        className="fixed bottom-0 left-0 right-0 z-50 animate-slide-up rounded-t-2xl border-t border-border bg-card px-4 pb-safe pt-4"
+      >
+        <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-muted" />
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-foreground">Save to Collection</h3>
+          <button
+            onClick={onClose}
+            className="rounded-lg p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+            aria-label="Close"
+          >
+            <XMarkIcon className="h-5 w-5" />
+          </button>
+        </div>
+
+        {loading ? (
+          <div className="flex justify-center py-8">
+            <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          </div>
+        ) : collections.length === 0 ? (
+          <div className="py-6 text-center">
+            <p className="text-sm text-muted-foreground mb-3">No collections yet</p>
+            <Link
+              href="/collections"
+              onClick={onClose}
+              className="rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
+            >
+              Create Collection
+            </Link>
+          </div>
+        ) : (
+          <div className="mb-4 max-h-64 overflow-y-auto space-y-1">
+            {collections.map((col) => (
+              <div
+                key={col.id}
+                className="flex items-center justify-between rounded-xl px-3 py-2.5 hover:bg-accent"
+              >
+                <div>
+                  <p className="text-sm font-medium text-foreground">{col.name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {col.recipe_count} recipe{col.recipe_count !== 1 ? "s" : ""}
+                  </p>
+                </div>
+                <button
+                  onClick={() => addToCollection(col.id, col.name)}
+                  disabled={addedIds.has(col.id)}
+                  className={cn(
+                    "rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors",
+                    addedIds.has(col.id)
+                      ? "bg-success/20 text-success"
+                      : "bg-primary/10 text-primary hover:bg-primary/20"
+                  )}
+                >
+                  {addedIds.has(col.id) ? "✓ Added" : "+ Add"}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="mb-8">
+          <Link
+            href="/collections"
+            onClick={onClose}
+            className="block text-center text-sm text-primary hover:underline"
+          >
+            Manage Collections →
+          </Link>
+        </div>
+      </div>
+    </>
   );
 }
 

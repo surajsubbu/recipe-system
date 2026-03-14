@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useAuth } from "@clerk/nextjs";
 import { pantryApi } from "@/lib/api";
 import type { PantryItem, PantryGrouped } from "@/lib/types";
@@ -29,6 +30,19 @@ const CATEGORY_ICONS: Record<string, string> = {
   other: "📦",
 };
 
+// Sort items within a category so expiring-soon items appear first
+function sortByExpiry(items: PantryItem[]): PantryItem[] {
+  const threeDaysMs = 3 * 24 * 60 * 60 * 1000;
+  const soon = Date.now() + threeDaysMs;
+  return [...items].sort((a, b) => {
+    const aExpiring = a.expires_on && new Date(a.expires_on).getTime() <= soon;
+    const bExpiring = b.expires_on && new Date(b.expires_on).getTime() <= soon;
+    if (aExpiring && !bExpiring) return -1;
+    if (!aExpiring && bExpiring) return 1;
+    return 0;
+  });
+}
+
 export default function PantryPage() {
   const { getToken } = useAuth();
   const [grouped, setGrouped] = useState<PantryGrouped>({});
@@ -48,7 +62,7 @@ export default function PantryPage() {
   async function load() {
     try {
       const token = await getToken();
-      setGrouped(await pantryApi.get(token));
+      setGrouped(await pantryApi.list(token));
     } catch {
       setError("Failed to load pantry.");
     } finally {
@@ -65,7 +79,7 @@ export default function PantryPage() {
     setAdding(true);
     try {
       const token = await getToken();
-      const item = await pantryApi.addItem(
+      const item = await pantryApi.create(
         {
           normalized_name: addName.trim().toLowerCase(),
           quantity: addQty ? parseFloat(addQty) : undefined,
@@ -95,7 +109,7 @@ export default function PantryPage() {
   async function deleteItem(item: PantryItem) {
     try {
       const token = await getToken();
-      await pantryApi.deleteItem(item.id, token);
+      await pantryApi.delete(item.id, token);
       setGrouped((prev) => {
         const cat = item.category || "other";
         const updated = (prev[cat] || []).filter((i) => i.id !== item.id);
@@ -125,7 +139,7 @@ export default function PantryPage() {
     setImporting(true);
     try {
       const token = await getToken();
-      await pantryApi.importShoppingList(token);
+      await pantryApi.importFromShoppingList(token);
       await load();
     } catch {
       setError("Failed to import from shopping list.");
@@ -138,24 +152,25 @@ export default function PantryPage() {
     (sum, items) => sum + items.length,
     0
   );
+  const categoryCount = Object.keys(grouped).length;
 
   if (loading) return <PageSpinner />;
 
   return (
-    <div className="px-safe mx-auto max-w-2xl px-4 pt-6">
+    <div className="pb-nav px-safe mx-auto max-w-2xl px-4 pt-6">
       {/* Header */}
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Pantry</h1>
           <p className="mt-0.5 text-sm text-muted-foreground">
-            {totalItems} item{totalItems !== 1 ? "s" : ""} in your pantry
+            {totalItems} item{totalItems !== 1 ? "s" : ""} across {categoryCount} categor{categoryCount !== 1 ? "ies" : "y"}
           </p>
         </div>
         <div className="flex gap-2">
           <button
             onClick={importFromShopping}
             disabled={importing}
-            className="flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:border-secondary/50 hover:text-secondary disabled:opacity-60"
+            className="flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary disabled:opacity-60"
             title="Import checked shopping list items"
           >
             <ArrowDownTrayIcon className="h-4 w-4" aria-hidden="true" />
@@ -170,6 +185,24 @@ export default function PantryPage() {
           </button>
         </div>
       </div>
+
+      {/* Cook from Pantry CTA — shown when ≥3 items */}
+      {totalItems >= 3 && (
+        <Link
+          href="/pantry/cook"
+          className="mb-6 flex items-center justify-between rounded-2xl bg-gradient-to-r from-primary/20 to-orange-600/10 border border-primary/20 p-4 transition-colors hover:border-primary/40"
+        >
+          <div>
+            <p className="text-sm font-semibold text-foreground">What can I cook tonight?</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Based on {totalItems} pantry item{totalItems !== 1 ? "s" : ""}
+            </p>
+          </div>
+          <span className="ml-4 flex-shrink-0 rounded-xl bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground">
+            Find Recipes →
+          </span>
+        </Link>
+      )}
 
       {/* Add form */}
       {showAdd && (
@@ -285,11 +318,22 @@ export default function PantryPage() {
                     <span className="text-muted-foreground/50">({items.length})</span>
                   </h2>
                   <div className="space-y-2">
-                    {items.map((item) => (
+                    {sortByExpiry(items).map((item) => (
                       <PantryItemRow
                         key={item.id}
                         item={item}
                         onDelete={() => deleteItem(item)}
+                        onUpdate={(updated) => {
+                          setGrouped((prev) => {
+                            const cat = item.category || "other";
+                            return {
+                              ...prev,
+                              [cat]: (prev[cat] || []).map((i) =>
+                                i.id === updated.id ? updated : i
+                              ),
+                            };
+                          });
+                        }}
                       />
                     ))}
                   </div>
@@ -316,37 +360,123 @@ export default function PantryPage() {
 function PantryItemRow({
   item,
   onDelete,
+  onUpdate,
 }: {
   item: PantryItem;
   onDelete: () => void;
+  onUpdate: (updated: PantryItem) => void;
 }) {
+  const { getToken } = useAuth();
+  const [editing, setEditing] = useState(false);
+  const [qty, setQty] = useState(item.quantity != null ? String(item.quantity) : "");
+  const [unit, setUnit] = useState(item.unit ?? "");
+  const [saving, setSaving] = useState(false);
+
+  const threeDaysMs = 3 * 24 * 60 * 60 * 1000;
   const isExpiringSoon =
     item.expires_on &&
-    new Date(item.expires_on) <= new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
+    new Date(item.expires_on).getTime() <= Date.now() + threeDaysMs;
+  const isExpiringToday =
+    item.expires_on &&
+    new Date(item.expires_on).toDateString() === new Date().toDateString();
+
+  async function save() {
+    setSaving(true);
+    try {
+      const token = await getToken();
+      const { pantryApi } = await import("@/lib/api");
+      const updated = await pantryApi.update(
+        item.id,
+        {
+          quantity: qty ? parseFloat(qty) : null,
+          unit: unit.trim() || null,
+        },
+        token
+      );
+      onUpdate(updated);
+      setEditing(false);
+    } catch {
+      // silently ignore
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
-    <div className="flex items-center justify-between rounded-xl border border-border bg-card px-4 py-3">
+    <div
+      className={cn(
+        "flex items-center justify-between rounded-xl border border-border bg-card px-4 py-3",
+        isExpiringToday && "bg-warning/10 border-warning/30"
+      )}
+    >
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-foreground capitalize">
           {item.normalized_name}
         </p>
-        <div className="flex items-center gap-2 mt-0.5">
-          {(item.quantity != null || item.unit) && (
-            <span className="text-xs text-muted-foreground">
-              {item.quantity != null ? item.quantity : ""}{item.unit ? ` ${item.unit}` : ""}
-            </span>
-          )}
-          {item.expires_on && (
-            <span
-              className={cn(
-                "text-xs",
-                isExpiringSoon ? "text-red-400 font-medium" : "text-muted-foreground"
-              )}
+        {editing ? (
+          <div className="mt-2 flex items-center gap-2">
+            <input
+              type="number"
+              value={qty}
+              onChange={(e) => setQty(e.target.value)}
+              placeholder="Qty"
+              className="w-20 rounded-lg border border-border bg-muted px-2 py-1 text-xs text-foreground focus:border-primary focus:outline-none"
+              min="0"
+              step="any"
+              autoFocus
+            />
+            <input
+              type="text"
+              value={unit}
+              onChange={(e) => setUnit(e.target.value)}
+              placeholder="unit"
+              className="w-20 rounded-lg border border-border bg-muted px-2 py-1 text-xs text-foreground focus:border-primary focus:outline-none"
+            />
+            <button
+              onClick={save}
+              disabled={saving}
+              className="rounded-lg bg-primary px-2 py-1 text-xs font-semibold text-primary-foreground disabled:opacity-60"
             >
-              {isExpiringSoon ? "⚠️ " : ""}Expires {item.expires_on}
-            </span>
-          )}
-        </div>
+              {saving ? "…" : "✓"}
+            </button>
+            <button
+              onClick={() => setEditing(false)}
+              className="rounded-lg border border-border px-2 py-1 text-xs text-muted-foreground"
+            >
+              ✕
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 mt-0.5">
+            {(item.quantity != null || item.unit) && (
+              <button
+                onClick={() => setEditing(true)}
+                className="text-xs text-muted-foreground hover:text-primary transition-colors"
+                title="Edit quantity"
+              >
+                {item.quantity != null ? item.quantity : ""}{item.unit ? ` ${item.unit}` : ""}
+              </button>
+            )}
+            {!item.quantity && !item.unit && (
+              <button
+                onClick={() => setEditing(true)}
+                className="text-xs text-muted-foreground/50 hover:text-primary transition-colors"
+              >
+                + add qty
+              </button>
+            )}
+            {item.expires_on && (
+              <span
+                className={cn(
+                  "text-xs",
+                  isExpiringSoon ? "text-warning font-medium" : "text-muted-foreground"
+                )}
+              >
+                {isExpiringSoon ? "⚠️ " : ""}Expires {item.expires_on}
+              </span>
+            )}
+          </div>
+        )}
       </div>
       <button
         onClick={onDelete}

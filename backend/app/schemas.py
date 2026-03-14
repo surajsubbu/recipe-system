@@ -283,6 +283,14 @@ class PantryItemOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+# ─── Cook from Pantry ─────────────────────────────────────────────────────────
+
+class CookableRecipe(RecipeSummary):
+    match_percentage: float       # 0.0–1.0
+    matched_ingredients: int
+    total_ingredients: int
+
+
 # ─── Webhooks ─────────────────────────────────────────────────────────────────
 
 class HAWebhookPayload(BaseModel):

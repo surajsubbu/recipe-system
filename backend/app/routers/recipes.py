@@ -16,8 +16,9 @@ from sqlalchemy.orm import selectinload
 
 from app.auth import get_current_user
 from app.database import get_db
-from app.models import Ingredient, Recipe, Step, Tag, User, UserRole
+from app.models import Ingredient, PantryItem, Recipe, Step, Tag, User, UserRole
 from app.schemas import (
+    CookableRecipe,
     PaginatedRecipes,
     RecipeCreate,
     RecipeOut,
@@ -133,6 +134,74 @@ async def list_tags(
     """Return all tags (for filter UI)."""
     result = await db.execute(select(Tag).order_by(Tag.name))
     return result.scalars().all()
+
+
+# ─── GET /recipes/cookable ────────────────────────────────────────────────────
+
+@router.get("/cookable", response_model=List[CookableRecipe])
+async def cookable_recipes(
+    limit: int = Query(30, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Return recipes the user can cook based on their pantry contents."""
+    # Fetch all pantry normalized names for current user
+    pantry_result = await db.execute(
+        select(PantryItem.normalized_name).where(PantryItem.owner_id == current_user.id)
+    )
+    pantry_set = set(row[0].lower() for row in pantry_result.all() if row[0])
+
+    if not pantry_set:
+        return []
+
+    # Fetch all recipes with ingredients
+    recipes_result = await db.execute(
+        select(Recipe).options(
+            selectinload(Recipe.ingredients),
+            selectinload(Recipe.tags),
+        )
+    )
+    all_recipes = recipes_result.scalars().unique().all()
+
+    cookable = []
+    for recipe in all_recipes:
+        ingredients = recipe.ingredients
+        total = len(ingredients)
+        if total == 0:
+            continue
+        matched = sum(
+            1 for ing in ingredients
+            if ing.normalized_name and ing.normalized_name.lower() in pantry_set
+        )
+        if matched == 0:
+            continue
+        match_pct = matched / total
+        cookable.append((recipe, match_pct, matched, total))
+
+    # Sort by match percentage descending
+    cookable.sort(key=lambda x: x[1], reverse=True)
+
+    results = []
+    for recipe, match_pct, matched, total in cookable[:limit]:
+        results.append(CookableRecipe(
+            id=recipe.id,
+            title=recipe.title,
+            description=recipe.description,
+            source_url=recipe.source_url,
+            image_url=recipe.image_url,
+            prep_time_minutes=recipe.prep_time_minutes,
+            cook_time_minutes=recipe.cook_time_minutes,
+            servings=recipe.servings,
+            calories_per_serving=recipe.calories_per_serving,
+            cuisine=recipe.cuisine,
+            difficulty=recipe.difficulty,
+            created_at=recipe.created_at,
+            tags=[{"id": t.id, "name": t.name} for t in recipe.tags],
+            match_percentage=match_pct,
+            matched_ingredients=matched,
+            total_ingredients=total,
+        ))
+    return results
 
 
 # ─── GET /recipes/{id} ────────────────────────────────────────────────────────

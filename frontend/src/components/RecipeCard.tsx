@@ -5,32 +5,34 @@ import Link from "next/link";
 import Image from "next/image";
 import { cn, formatCookTime, totalTime, isYouTubeUrl } from "@/lib/utils";
 import type { RecipeSummary } from "@/lib/types";
-import { ClockIcon, FireIcon, GlobeAltIcon } from "@heroicons/react/24/outline";
+import { ClockIcon, GlobeAltIcon } from "@heroicons/react/24/outline";
 
 interface RecipeCardProps {
   recipe: RecipeSummary;
   className?: string;
+  matchPercentage?: number; // 0–100, shown as green badge when provided
 }
 
-export function RecipeCard({ recipe, className }: RecipeCardProps) {
+export function RecipeCard({ recipe, className, matchPercentage }: RecipeCardProps) {
   const time = totalTime(recipe.prep_time_minutes, recipe.cook_time_minutes);
+  const firstTag = recipe.tags[0];
 
   return (
     <Link
       href={`/recipe/${recipe.id}`}
       className={cn(
-        "group flex flex-col overflow-hidden rounded-2xl border border-border bg-card transition-all hover:border-primary/50 hover:shadow-lg hover:shadow-primary/10",
+        "group relative flex flex-col overflow-hidden rounded-2xl border border-border bg-card transition-all hover:border-primary/50 hover:shadow-lg hover:shadow-primary/10",
         className
       )}
     >
-      {/* Image */}
-      <div className="relative aspect-[4/3] w-full overflow-hidden bg-muted">
+      {/* Portrait image container */}
+      <div className="relative aspect-[3/4] w-full overflow-hidden bg-muted">
         {recipe.image_url ? (
           <Image
             src={recipe.image_url}
             alt={recipe.title}
             fill
-            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
             className="object-cover transition-transform duration-300 group-hover:scale-105"
           />
         ) : (
@@ -40,8 +42,16 @@ export function RecipeCard({ recipe, className }: RecipeCardProps) {
             </span>
           </div>
         )}
-        {/* Difficulty badge */}
-        {recipe.difficulty && (
+
+        {/* Gradient overlay — title sits on this */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
+
+        {/* Match % badge (top-left) — shown instead of difficulty when provided */}
+        {matchPercentage !== undefined ? (
+          <span className="absolute left-2 top-2 rounded-full bg-success/90 px-2 py-0.5 text-xs font-semibold text-success-foreground backdrop-blur-sm">
+            {Math.round(matchPercentage)}% match
+          </span>
+        ) : recipe.difficulty ? (
           <span
             className={cn(
               "absolute left-2 top-2 rounded-full px-2 py-0.5 text-xs font-semibold backdrop-blur-sm",
@@ -58,65 +68,26 @@ export function RecipeCard({ recipe, className }: RecipeCardProps) {
           >
             {recipe.difficulty}
           </span>
-        )}
+        ) : null}
 
-        {/* Source badge */}
-        {recipe.source_url && (
-          <span
-            className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-card/80 backdrop-blur-sm"
-            title={isYouTubeUrl(recipe.source_url) ? "From YouTube" : "From website"}
-          >
-            {isYouTubeUrl(recipe.source_url) ? (
-              <YoutubeIcon />
-            ) : (
-              <FaviconIcon url={recipe.source_url} />
-            )}
+        {/* Cook time pill (top-right) */}
+        {time && (
+          <span className="absolute right-2 top-2 flex items-center gap-1 rounded-full bg-black/50 px-2 py-0.5 text-xs text-white backdrop-blur-sm">
+            <ClockIcon className="h-3 w-3" aria-hidden="true" />
+            {time}
           </span>
         )}
-      </div>
 
-      {/* Content */}
-      <div className="flex flex-1 flex-col gap-2 p-3">
-        <h2 className="line-clamp-2 text-sm font-semibold leading-snug text-foreground group-hover:text-primary">
+        {/* Title on gradient overlay (bottom) */}
+        <h2 className="absolute bottom-3 left-3 right-3 line-clamp-2 text-sm font-bold leading-snug text-white">
           {recipe.title}
         </h2>
 
-        {/* Meta row */}
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-          {time && (
-            <span className="flex items-center gap-1">
-              <ClockIcon className="h-3.5 w-3.5" aria-hidden="true" />
-              {time}
-            </span>
-          )}
-          {recipe.servings && (
-            <span className="flex items-center gap-1">
-              <FireIcon className="h-3.5 w-3.5" aria-hidden="true" />
-              {recipe.servings} serving{recipe.servings !== 1 ? "s" : ""}
-            </span>
-          )}
-          {recipe.cuisine && (
-            <span className="capitalize">{recipe.cuisine}</span>
-          )}
-        </div>
-
-        {/* Tags */}
-        {recipe.tags.length > 0 && (
-          <div className="mt-auto flex flex-wrap gap-1 pt-1">
-            {recipe.tags.slice(0, 4).map((tag) => (
-              <span
-                key={tag.id}
-                className="rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary"
-              >
-                {tag.name}
-              </span>
-            ))}
-            {recipe.tags.length > 4 && (
-              <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                +{recipe.tags.length - 4}
-              </span>
-            )}
-          </div>
+        {/* Single tag pill (bottom-right, above title) */}
+        {firstTag && (
+          <span className="absolute bottom-10 right-3 rounded-full bg-primary/80 px-2 py-0.5 text-xs text-white backdrop-blur-sm">
+            {firstTag.name}
+          </span>
         )}
       </div>
     </Link>
@@ -126,15 +97,7 @@ export function RecipeCard({ recipe, className }: RecipeCardProps) {
 export function RecipeCardSkeleton() {
   return (
     <div className="flex flex-col overflow-hidden rounded-2xl border border-border bg-card">
-      <div className="skeleton aspect-[4/3] w-full" />
-      <div className="flex flex-col gap-2 p-3">
-        <div className="skeleton h-4 w-3/4 rounded" />
-        <div className="skeleton h-3 w-1/2 rounded" />
-        <div className="flex gap-1 pt-1">
-          <div className="skeleton h-5 w-12 rounded-full" />
-          <div className="skeleton h-5 w-16 rounded-full" />
-        </div>
-      </div>
+      <div className="skeleton aspect-[3/4] w-full" />
     </div>
   );
 }
@@ -162,11 +125,9 @@ function FaviconIcon({ url }: { url: string }) {
     try {
       const urlObj = new URL(url);
       const domain = urlObj.origin;
-      // Try multiple favicon sources
-      const favicon = `${domain}/favicon.ico`;
-      setFaviconUrl(favicon);
+      setFaviconUrl(`${domain}/favicon.ico`);
     } catch {
-      // Fallback to globe icon if URL parsing fails
+      // ignore
     }
   }, [url]);
 
@@ -176,10 +137,13 @@ function FaviconIcon({ url }: { url: string }) {
         src={faviconUrl}
         alt="Website favicon"
         className="h-4 w-4"
-        onError={() => <GlobeAltIcon className="h-4 w-4 text-blue-400" aria-hidden="true" />}
+        onError={() => setFaviconUrl("")}
       />
     );
   }
 
   return <GlobeAltIcon className="h-4 w-4 text-blue-400" aria-hidden="true" />;
 }
+
+// Exported for use in source badge contexts if needed
+export { YoutubeIcon, FaviconIcon };
