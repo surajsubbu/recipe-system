@@ -116,11 +116,15 @@ def ingest_url_task(self, url: str, user_id: int) -> dict:
                 logger.warning("[ingest] Could not extract transcript: %s", exc)
                 # Continue with description only if transcript fails
 
-            # ── Step 2a: Try description + transcript first (fast path) ─────────
+            # ── Step 2a: Extract from transcript (preferred) + description ────
             _progress(self, "Extracting recipe from video…")
-            combined_text = description
             if transcript:
-                combined_text = f"{description}\n\n{transcript}"
+                # Put transcript first — it has the detailed ingredient amounts
+                # and step-by-step instructions. Cap description to 500 chars
+                # so transcript dominates the context window.
+                combined_text = f"{transcript}\n\n---\nVideo description:\n{description[:500]}"
+            else:
+                combined_text = description
 
             recipe_data: RecipeData = from_text(
                 text=combined_text,
@@ -132,8 +136,8 @@ def ingest_url_task(self, url: str, user_id: int) -> dict:
             if not recipe_data.image_url and thumbnail_url:
                 recipe_data.image_url = thumbnail_url
 
-            # Store transcript with the recipe (even if empty/failed)
-            recipe_data.transcript = transcript
+            # Store transcript only when non-empty (None → not shown in UI)
+            recipe_data.transcript = transcript if transcript else None
 
         else:  # web_recipe
             _progress(self, "Scraping recipe page…")

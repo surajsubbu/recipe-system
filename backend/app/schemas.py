@@ -141,6 +141,7 @@ class IngestRequest(BaseModel):
 class IngestJobOut(BaseModel):
     job_id: str
     status: str           # pending | running | done | failed
+    progress: Optional[str] = None  # human-readable step label
     recipe_id: Optional[int] = None
     error: Optional[str] = None
 

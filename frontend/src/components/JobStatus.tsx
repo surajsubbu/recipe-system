@@ -74,42 +74,44 @@ export function JobStatus({
     );
   }
 
+  const isActive = job.status === "pending" || job.status === "running";
+
   return (
     <div
       className={cn(
-        "flex items-center gap-3 rounded-xl border p-4",
+        "rounded-xl border p-4",
         job.status === "done" && "border-green-500/30 bg-green-500/10",
         job.status === "failed" && "border-red-500/30 bg-red-500/10",
-        (job.status === "pending" || job.status === "running") &&
-          "border-border bg-muted",
+        isActive && "border-border bg-muted",
         className
       )}
       role="status"
       aria-live="polite"
     >
-      {job.status === "done" && (
-        <CheckCircleIcon className="h-5 w-5 flex-shrink-0 text-green-400" aria-hidden="true" />
-      )}
-      {job.status === "failed" && (
-        <ExclamationCircleIcon className="h-5 w-5 flex-shrink-0 text-red-400" aria-hidden="true" />
-      )}
-      {(job.status === "pending" || job.status === "running") && (
-        <LoadingSpinner size="sm" label="" />
-      )}
+      {/* Status row */}
+      <div className="mb-3 flex items-center gap-3">
+        {job.status === "done" && (
+          <CheckCircleIcon className="h-5 w-5 flex-shrink-0 text-green-400" aria-hidden="true" />
+        )}
+        {job.status === "failed" && (
+          <ExclamationCircleIcon className="h-5 w-5 flex-shrink-0 text-red-400" aria-hidden="true" />
+        )}
+        {isActive && <LoadingSpinner size="sm" label="" />}
 
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium capitalize text-foreground">
-          {job.status === "running" ? "Processing" : job.status}
-        </p>
-        {job.progress && (
-          <p className="truncate text-xs text-muted-foreground">
-            {job.progress}
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium capitalize text-foreground">
+            {job.status === "running" ? "Processing…" : job.status}
           </p>
-        )}
-        {job.error && (
-          <p className="text-xs text-red-400">{job.error}</p>
-        )}
+          {job.error && (
+            <p className="text-xs text-red-400">{job.error}</p>
+          )}
+        </div>
       </div>
+
+      {/* Progress bar — shown while running or on done */}
+      {(isActive || job.status === "done") && (
+        <JobProgressBar job={job} />
+      )}
     </div>
   );
 }
@@ -117,17 +119,21 @@ export function JobStatus({
 // ─── Inline progress bar variant ─────────────────────────────────────────────
 
 const PROGRESS_STEPS = [
+  "classifying",
   "fetching",
-  "extracting",
+  "extracting transcript",
+  "extracting recipe",
+  "scraping",
+  "parsing",
   "normalizing",
   "saving",
-  "done",
 ];
 
 function stepIndex(progress: string | null): number {
   if (!progress) return 0;
   const lc = progress.toLowerCase();
-  return PROGRESS_STEPS.findIndex((s) => lc.includes(s));
+  const idx = PROGRESS_STEPS.findIndex((s) => lc.includes(s));
+  return idx === -1 ? 0 : idx;
 }
 
 export function JobProgressBar({ job }: { job: IngestJobOut }) {

@@ -9,6 +9,7 @@ app/tasks/ingest.py (implemented in Step 3/4).  This router just enqueues
 the task and polls Celery's result backend (Redis) for status.
 """
 import logging
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -112,7 +113,13 @@ async def get_ingest_status(
             return IngestJobOut(job_id=job_id, status="failed", error=error_msg)
 
         # PENDING / STARTED / RETRY / etc.
-        return IngestJobOut(job_id=job_id, status=api_status)
+        # For STARTED state, Celery stores progress in async_result.info
+        progress: Optional[str] = None
+        if celery_state in ("STARTED", "RETRY"):
+            info = async_result.info or {}
+            if isinstance(info, dict):
+                progress = info.get("progress")
+        return IngestJobOut(job_id=job_id, status=api_status, progress=progress)
 
     except Exception as exc:
         logger.exception("Error fetching job status for %s", job_id)

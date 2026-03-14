@@ -111,6 +111,19 @@ async def create_collection(
     return _col_to_out(col, 0)
 
 
+# ─── GET /collections/{id} ────────────────────────────────────────────────────
+
+@router.get("/{collection_id}", response_model=CollectionOut)
+async def get_collection(
+    collection_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    col = await _get_collection_or_404(collection_id, current_user, db)
+    count = await _recipe_count(col.id, db)
+    return _col_to_out(col, count)
+
+
 # ─── PUT /collections/{id} ────────────────────────────────────────────────────
 
 @router.put("/{collection_id}", response_model=CollectionOut)

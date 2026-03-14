@@ -227,8 +227,8 @@ def from_text(
     user_content = "Extract the recipe from this text"
     if title_hint:
         user_content += f" (page/video title: '{title_hint}')"
-    # Limit input to ~5000 chars to leave room for output tokens
-    user_content += f":\n\n{text[:5000]}"
+    # Limit input to ~15000 chars — large enough for full transcripts
+    user_content += f":\n\n{text[:15000]}"
 
     raw = chat_complete(
         model=SMART_MODEL,
