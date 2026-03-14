@@ -55,10 +55,10 @@ export default function RootLayout({
       */}
       <html lang="en" className="dark">
         <body className={`${inter.variable} antialiased`}>
-          <main className="pb-nav">
+          <NavBar />
+          <main className="ml-16 md:ml-56">
             {children}
           </main>
-          <NavBar />
         </body>
       </html>
     </ClerkProvider>

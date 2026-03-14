@@ -2,14 +2,14 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useAuth } from "@clerk/nextjs";
-import { shoppingApi } from "@/lib/api";
+import { shoppingApi, pantryApi } from "@/lib/api";
 import type { ShoppingList, ShoppingItem, IngredientCategory } from "@/lib/types";
 import { PageSpinner } from "@/components/LoadingSpinner";
 import { cn, capitalize } from "@/lib/utils";
 import {
   TrashIcon,
   CheckIcon,
-  PlusIcon,
+  ArchiveBoxArrowDownIcon,
 } from "@heroicons/react/24/outline";
 
 // Category display order
@@ -70,6 +70,7 @@ export default function ShoppingListPage() {
   const [loading, setLoading] = useState(true);
   const [clearing, setClearing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [addedToPantry, setAddedToPantry] = useState<Set<number>>(new Set());
 
   const load = useCallback(async () => {
     try {
@@ -115,6 +116,25 @@ export default function ShoppingListPage() {
       await shoppingApi.removeItem(itemId, token);
     } catch {
       load();
+    }
+  }
+
+  async function addToPantry(item: ShoppingItem) {
+    if (addedToPantry.has(item.id)) return;
+    try {
+      const token = await getToken();
+      await pantryApi.create(
+        {
+          normalized_name: item.name,
+          quantity: item.amount ?? undefined,
+          unit: item.unit ?? undefined,
+          category: item.category ?? undefined,
+        },
+        token
+      );
+      setAddedToPantry((prev) => new Set(prev).add(item.id));
+    } catch {
+      // silently ignore — button stays interactive
     }
   }
 
@@ -247,10 +267,26 @@ export default function ShoppingListPage() {
                         {item.name}
                       </span>
 
+                      {/* Add to pantry */}
+                      <button
+                        onClick={() => addToPantry(item)}
+                        disabled={addedToPantry.has(item.id)}
+                        className={cn(
+                          "flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg transition-colors",
+                          addedToPantry.has(item.id)
+                            ? "text-green-400"
+                            : "text-muted-foreground hover:text-primary"
+                        )}
+                        aria-label={`Add ${item.name} to pantry`}
+                        title="Add to pantry"
+                      >
+                        <ArchiveBoxArrowDownIcon className="h-4 w-4" aria-hidden="true" />
+                      </button>
+
                       {/* Remove */}
                       <button
                         onClick={() => removeItem(item.id)}
-                        className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-muted-foreground opacity-0 transition-opacity hover:text-red-400 group-hover:opacity-100 focus:opacity-100"
+                        className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:text-red-400"
                         aria-label={`Remove ${item.name}`}
                       >
                         <TrashIcon className="h-4 w-4" aria-hidden="true" />

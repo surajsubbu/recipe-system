@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useAuth, useUser } from "@clerk/nextjs";
+import { useAuth, useUser, useClerk } from "@clerk/nextjs";
+import { useRouter } from "next/navigation";
 import { recipesApi, pantryApi } from "@/lib/api";
 import type { RecipeSummary } from "@/lib/types";
 import { RecipeCard, RecipeCardSkeleton } from "@/components/RecipeCard";
-import { BeakerIcon } from "@heroicons/react/24/outline";
+import { BeakerIcon, PlusCircleIcon, UserCircleIcon } from "@heroicons/react/24/outline";
 
 const CUISINES = [
   { label: "🍝 Italian", q: "italian" },
@@ -27,9 +28,12 @@ function greeting() {
 export default function HomePage() {
   const { getToken } = useAuth();
   const { user } = useUser();
+  const { signOut } = useClerk();
+  const router = useRouter();
   const [recipes, setRecipes] = useState<RecipeSummary[]>([]);
   const [pantryCount, setPantryCount] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showUserMenu, setShowUserMenu] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -55,8 +59,13 @@ export default function HomePage() {
 
   const firstName = user?.firstName ?? user?.username ?? null;
 
+  async function handleSignOut() {
+    await signOut();
+    router.push("/sign-in");
+  }
+
   return (
-    <div className="pb-nav px-4 pt-6 mx-auto max-w-3xl">
+    <div className="px-4 pt-6 mx-auto max-w-3xl pb-8">
       {/* ── Greeting ─────────────────────────────────────────────────── */}
       <div className="mb-6 flex items-center justify-between">
         <div>
@@ -65,44 +74,88 @@ export default function HomePage() {
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">What are you cooking today?</p>
         </div>
-        {user?.imageUrl && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={user.imageUrl}
-            alt={user.fullName ?? "Avatar"}
-            className="h-10 w-10 rounded-full object-cover ring-2 ring-primary/30"
-          />
-        )}
+        {/* Avatar — tapping opens sign-out menu */}
+        <div className="relative">
+          <button
+            onClick={() => setShowUserMenu((v) => !v)}
+            className="focus:outline-none"
+            aria-label="User menu"
+          >
+            {user?.imageUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={user.imageUrl}
+                alt={user.fullName ?? "Avatar"}
+                className="h-10 w-10 rounded-full object-cover ring-2 ring-primary/30"
+              />
+            ) : user ? (
+              <UserCircleIcon className="h-10 w-10 text-muted-foreground" />
+            ) : null}
+          </button>
+          {showUserMenu && (
+            <>
+              {/* Backdrop */}
+              <div
+                className="fixed inset-0 z-10"
+                onClick={() => setShowUserMenu(false)}
+              />
+              {/* Dropdown */}
+              <div className="absolute right-0 top-12 z-20 min-w-[160px] rounded-xl border border-border bg-card shadow-lg">
+                <div className="border-b border-border px-4 py-2.5">
+                  <p className="text-xs font-semibold text-foreground truncate max-w-[140px]">
+                    {user?.fullName ?? user?.username ?? "User"}
+                  </p>
+                  <p className="text-xs text-muted-foreground truncate max-w-[140px]">
+                    {user?.primaryEmailAddress?.emailAddress}
+                  </p>
+                </div>
+                <button
+                  onClick={handleSignOut}
+                  className="w-full px-4 py-2.5 text-left text-sm text-red-400 hover:bg-red-500/10 rounded-b-xl transition-colors"
+                >
+                  Sign out
+                </button>
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
-      {/* ── Cook from Pantry hero ─────────────────────────────────────── */}
-      {pantryCount !== null && (
-        pantryCount > 0 ? (
+      {/* ── Action cards row ─────────────────────────────────────────── */}
+      <div className="mb-6 flex gap-3">
+        {/* Cook from Pantry */}
+        {pantryCount !== null && pantryCount > 0 ? (
           <Link
             href="/pantry/cook"
-            className="mb-6 flex items-center justify-between rounded-2xl bg-gradient-to-br from-primary/80 to-orange-600/60 p-5 transition-all hover:opacity-90 active:scale-[0.98]"
+            className="flex-1 flex flex-col justify-between rounded-2xl bg-gradient-to-br from-primary/80 to-orange-600/60 p-4 transition-all hover:opacity-90 active:scale-[0.98]"
           >
-            <div>
-              <p className="text-lg font-bold text-white">What can I cook tonight?</p>
-              <p className="mt-0.5 text-sm text-white/80">
-                You have {pantryCount} item{pantryCount !== 1 ? "s" : ""} in your pantry
-              </p>
-            </div>
-            <span className="ml-4 flex-shrink-0 rounded-xl bg-white/20 px-4 py-2 text-sm font-semibold text-white backdrop-blur-sm">
+            <p className="text-base font-bold text-white leading-snug">What can I cook tonight?</p>
+            <p className="mt-1 text-xs text-white/80">
+              {pantryCount} item{pantryCount !== 1 ? "s" : ""} in pantry
+            </p>
+            <span className="mt-3 self-start rounded-xl bg-white/20 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur-sm">
               Find Recipes →
             </span>
           </Link>
         ) : (
           <Link
             href="/pantry"
-            className="mb-6 flex items-center gap-3 rounded-2xl border border-border bg-card p-4 text-sm text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground"
+            className="flex-1 flex items-center gap-3 rounded-2xl border border-border bg-card p-4 text-sm text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground"
           >
-            <BeakerIcon className="h-6 w-6 flex-shrink-0 text-primary/60" aria-hidden="true" />
-            <span>Add pantry items to find recipe matches</span>
-            <span className="ml-auto text-primary">→</span>
+            <BeakerIcon className="h-5 w-5 flex-shrink-0 text-primary/60" aria-hidden="true" />
+            <span className="text-xs">Add pantry items to find recipe matches</span>
           </Link>
-        )
-      )}
+        )}
+
+        {/* Add Recipe */}
+        <Link
+          href="/add"
+          className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-border bg-card p-4 transition-colors hover:border-primary/50 hover:text-primary min-w-[90px]"
+        >
+          <PlusCircleIcon className="h-7 w-7 text-primary" aria-hidden="true" />
+          <span className="text-xs font-medium text-foreground text-center leading-tight">Add Recipe</span>
+        </Link>
+      </div>
 
       {/* ── Browse by Cuisine ─────────────────────────────────────────── */}
       <div className="mb-6">

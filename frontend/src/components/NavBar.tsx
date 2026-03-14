@@ -1,8 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
   BookOpenIcon,
@@ -10,7 +9,6 @@ import {
   BeakerIcon,
   BookmarkIcon,
   UserCircleIcon,
-  XMarkIcon,
   ArrowRightStartOnRectangleIcon,
   ShoppingCartIcon,
   CalendarIcon,
@@ -22,10 +20,8 @@ import {
   HomeIcon as HomeSolid,
   BeakerIcon as BeakerSolid,
   BookmarkIcon as BookmarkSolid,
-  UserCircleIcon as UserCircleSolid,
 } from "@heroicons/react/24/solid";
 import { useUser, useClerk } from "@clerk/nextjs";
-import { useRouter } from "next/navigation";
 
 const NAV_ITEMS = [
   {
@@ -33,30 +29,35 @@ const NAV_ITEMS = [
     label: "Home",
     icon: HomeIcon,
     activeIcon: HomeSolid,
-    isActive: (pathname: string) => pathname === "/",
+    isActive: (p: string) => p === "/",
   },
   {
     href: "/recipes",
     label: "Recipes",
     icon: BookOpenIcon,
     activeIcon: BookOpenSolid,
-    isActive: (pathname: string) =>
-      pathname === "/recipes" || pathname.startsWith("/recipe/"),
+    isActive: (p: string) => p === "/recipes" || p.startsWith("/recipe/"),
   },
   {
     href: "/pantry",
     label: "Pantry",
     icon: BeakerIcon,
     activeIcon: BeakerSolid,
-    isActive: (pathname: string) => pathname.startsWith("/pantry"),
+    isActive: (p: string) => p.startsWith("/pantry"),
   },
   {
     href: "/collections",
     label: "Saved",
     icon: BookmarkIcon,
     activeIcon: BookmarkSolid,
-    isActive: (pathname: string) => pathname.startsWith("/collections"),
+    isActive: (p: string) => p.startsWith("/collections"),
   },
+];
+
+const SECONDARY_ITEMS = [
+  { href: "/add", label: "Add Recipe", icon: PlusCircleIcon },
+  { href: "/shopping-list", label: "Shopping List", icon: ShoppingCartIcon },
+  { href: "/meal-plan", label: "Meal Plan", icon: CalendarIcon },
 ];
 
 export function NavBar() {
@@ -64,14 +65,11 @@ export function NavBar() {
   const router = useRouter();
   const { user } = useUser();
   const { signOut } = useClerk();
-  const [showAccount, setShowAccount] = useState(false);
 
-  // Hide nav in cook mode (fullscreen)
+  // Hide sidebar in fullscreen cook mode
   if (pathname.startsWith("/cook/")) return null;
 
-  const isAdmin =
-    (user?.publicMetadata as { role?: string })?.role === "admin";
-  const isAccountActive = showAccount;
+  const isAdmin = (user?.publicMetadata as { role?: string })?.role === "admin";
 
   async function handleSignOut() {
     await signOut();
@@ -79,157 +77,122 @@ export function NavBar() {
   }
 
   return (
-    <>
-      {/* ── Bottom Navigation ─────────────────────────────────────────── */}
-      <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-card/95 backdrop-blur-sm pb-safe">
-        <ul className="flex items-center justify-around px-2">
-          {NAV_ITEMS.map(({ href, label, icon: Icon, activeIcon: ActiveIcon, isActive }) => {
-            const active = isActive(pathname);
-            return (
-              <li key={href} className="flex-1">
-                <Link
-                  href={href}
-                  className={cn(
-                    "flex min-h-touch flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-2 text-xs font-medium transition-colors",
-                    active
-                      ? "text-primary"
-                      : "text-muted-foreground hover:text-foreground"
-                  )}
-                  aria-current={active ? "page" : undefined}
-                >
-                  {active ? (
-                    <ActiveIcon className="h-6 w-6" aria-hidden="true" />
-                  ) : (
-                    <Icon className="h-6 w-6" aria-hidden="true" />
-                  )}
-                  <span>{label}</span>
-                </Link>
-              </li>
-            );
-          })}
+    <nav className="fixed left-0 top-0 bottom-0 z-50 flex w-16 flex-col border-r border-border bg-card/95 backdrop-blur-sm md:w-56">
+      {/* App header */}
+      <div className="flex items-center gap-2.5 border-b border-border px-3 py-5 md:px-4">
+        <span className="flex-shrink-0 text-2xl">🍳</span>
+        <span className="hidden truncate font-bold text-foreground md:block">Recipes</span>
+      </div>
 
-          {/* Account tab */}
-          <li className="flex-1">
-            <button
-              onClick={() => setShowAccount(true)}
-              className={cn(
-                "flex min-h-touch w-full flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-2 text-xs font-medium transition-colors",
-                isAccountActive
-                  ? "text-primary"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-              aria-label="Account"
-            >
-              {user?.imageUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={user.imageUrl}
-                  alt={user.fullName ?? "Account"}
-                  className="h-6 w-6 rounded-full object-cover"
-                />
-              ) : isAccountActive ? (
-                <UserCircleSolid className="h-6 w-6" aria-hidden="true" />
-              ) : (
-                <UserCircleIcon className="h-6 w-6" aria-hidden="true" />
-              )}
-              <span>Account</span>
-            </button>
-          </li>
-        </ul>
-      </nav>
-
-      {/* ── Account Sheet ─────────────────────────────────────────────── */}
-      {showAccount && (
-        <>
-          {/* Backdrop */}
-          <div
-            className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
-            onClick={() => setShowAccount(false)}
-            aria-hidden="true"
-          />
-
-          {/* Sheet */}
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label="Account"
-            className="fixed bottom-0 left-0 right-0 z-50 animate-slide-up rounded-t-2xl border-t border-border bg-card px-4 pb-safe pt-4"
-          >
-            {/* Handle */}
-            <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-muted" />
-
-            {/* Header */}
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-foreground">Account</h2>
-              <button
-                onClick={() => setShowAccount(false)}
-                className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                aria-label="Close"
-              >
-                <XMarkIcon className="h-5 w-5" />
-              </button>
-            </div>
-
-            {/* User info */}
-            {user && (
-              <div className="mb-4 flex items-center gap-3 rounded-xl bg-muted p-3">
-                {user.imageUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={user.imageUrl}
-                    alt={user.fullName ?? "Avatar"}
-                    className="h-12 w-12 rounded-full object-cover"
-                  />
-                ) : (
-                  <UserCircleIcon className="h-12 w-12 text-muted-foreground" />
+      {/* Nav items */}
+      <ul className="flex flex-1 flex-col gap-0.5 overflow-y-auto p-2">
+        {NAV_ITEMS.map(({ href, label, icon: Icon, activeIcon: ActiveIcon, isActive }) => {
+          const active = isActive(pathname);
+          return (
+            <li key={href}>
+              <Link
+                href={href}
+                title={label}
+                className={cn(
+                  "flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors",
+                  active
+                    ? "bg-primary/10 text-primary"
+                    : "text-muted-foreground hover:bg-accent hover:text-foreground"
                 )}
-                <div className="min-w-0">
-                  <p className="truncate font-semibold text-foreground">
-                    {user.fullName ?? user.username ?? "User"}
-                  </p>
-                  <p className="truncate text-sm text-muted-foreground">
-                    {user.primaryEmailAddress?.emailAddress}
-                  </p>
-                  {isAdmin && (
-                    <span className="mt-0.5 inline-block rounded-full bg-primary/20 px-2 py-0.5 text-xs font-medium text-primary">
-                      Admin
-                    </span>
-                  )}
-                </div>
-              </div>
-            )}
+                aria-current={active ? "page" : undefined}
+              >
+                {active ? (
+                  <ActiveIcon className="h-5 w-5 flex-shrink-0" aria-hidden="true" />
+                ) : (
+                  <Icon className="h-5 w-5 flex-shrink-0" aria-hidden="true" />
+                )}
+                <span className="hidden text-sm font-medium md:inline">{label}</span>
+              </Link>
+            </li>
+          );
+        })}
 
-            {/* Quick nav links */}
-            <div className="mb-4 space-y-1">
-              {[
-                { href: "/add", label: "Add Recipe", icon: PlusCircleIcon },
-                { href: "/shopping-list", label: "Shopping List", icon: ShoppingCartIcon },
-                { href: "/meal-plan", label: "Meal Plan", icon: CalendarIcon },
-                ...(isAdmin ? [{ href: "/admin", label: "Admin", icon: ShieldCheckIcon }] : []),
-              ].map(({ href, label, icon: Icon }) => (
-                <Link
-                  key={href}
-                  href={href}
-                  onClick={() => setShowAccount(false)}
-                  className="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                >
-                  <Icon className="h-5 w-5" aria-hidden="true" />
-                  {label}
-                </Link>
-              ))}
-            </div>
+        {/* Divider */}
+        <li className="my-1.5">
+          <div className="h-px bg-border" />
+        </li>
 
-            {/* Sign Out */}
-            <button
-              onClick={handleSignOut}
-              className="mb-8 flex w-full items-center gap-3 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm font-medium text-red-400 transition-colors hover:bg-red-500/20"
+        {/* Secondary items */}
+        {SECONDARY_ITEMS.map(({ href, label, icon: Icon }) => {
+          const active = pathname === href;
+          return (
+            <li key={href}>
+              <Link
+                href={href}
+                title={label}
+                className={cn(
+                  "flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors",
+                  active
+                    ? "bg-primary/10 text-primary"
+                    : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                )}
+              >
+                <Icon className="h-5 w-5 flex-shrink-0" aria-hidden="true" />
+                <span className="hidden text-sm font-medium md:inline">{label}</span>
+              </Link>
+            </li>
+          );
+        })}
+
+        {isAdmin && (
+          <li>
+            <Link
+              href="/admin"
+              title="Admin"
+              className={cn(
+                "flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors",
+                pathname === "/admin"
+                  ? "bg-primary/10 text-primary"
+                  : "text-muted-foreground hover:bg-accent hover:text-foreground"
+              )}
             >
-              <ArrowRightStartOnRectangleIcon className="h-5 w-5" aria-hidden="true" />
-              Sign out
-            </button>
+              <ShieldCheckIcon className="h-5 w-5 flex-shrink-0" aria-hidden="true" />
+              <span className="hidden text-sm font-medium md:inline">Admin</span>
+            </Link>
+          </li>
+        )}
+      </ul>
+
+      {/* User section */}
+      <div className="border-t border-border p-2">
+        {/* User info — desktop only */}
+        {user && (
+          <div className="mb-1 hidden items-center gap-2.5 rounded-xl px-3 py-2 md:flex">
+            {user.imageUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={user.imageUrl}
+                alt={user.fullName ?? "Avatar"}
+                className="h-7 w-7 flex-shrink-0 rounded-full object-cover"
+              />
+            ) : (
+              <UserCircleIcon className="h-7 w-7 flex-shrink-0 text-muted-foreground" />
+            )}
+            <div className="min-w-0">
+              <p className="truncate text-xs font-semibold text-foreground">
+                {user.fullName ?? user.username ?? "User"}
+              </p>
+              <p className="truncate text-xs text-muted-foreground">
+                {user.primaryEmailAddress?.emailAddress}
+              </p>
+            </div>
           </div>
-        </>
-      )}
-    </>
+        )}
+
+        <button
+          onClick={handleSignOut}
+          title="Sign out"
+          className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-400"
+        >
+          <ArrowRightStartOnRectangleIcon className="h-5 w-5 flex-shrink-0" aria-hidden="true" />
+          <span className="hidden text-sm font-medium md:inline">Sign out</span>
+        </button>
+      </div>
+    </nav>
   );
 }
