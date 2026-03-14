@@ -198,6 +198,63 @@ export interface InviteRequest {
   email: string;
 }
 
+// ─── Collections ──────────────────────────────────────────────────────────────
+
+export interface Collection {
+  id: number;
+  name: string;
+  description: string | null;
+  cover_image_url: string | null;
+  created_at: string;
+  recipe_count: number;
+}
+
+export interface CollectionCreate {
+  name: string;
+  description?: string | null;
+  cover_image_url?: string | null;
+}
+
+export interface CollectionUpdate {
+  name?: string | null;
+  description?: string | null;
+  cover_image_url?: string | null;
+}
+
+export interface PaginatedCollections {
+  total: number;
+  page: number;
+  page_size: number;
+  items: Collection[];
+}
+
+// ─── Pantry Items ─────────────────────────────────────────────────────────────
+
+export interface PantryItem {
+  id: number;
+  normalized_name: string;
+  quantity: number | null;
+  unit: string | null;
+  category: string | null;
+  expires_on: string | null;
+  updated_at: string;
+}
+
+export interface PantryItemCreate {
+  normalized_name: string;
+  quantity?: number | null;
+  unit?: string | null;
+  category?: string | null;
+  expires_on?: string | null;
+}
+
+export interface PantryItemUpdate {
+  quantity?: number | null;
+  unit?: string | null;
+  category?: string | null;
+  expires_on?: string | null;
+}
+
 // ─── Health ───────────────────────────────────────────────────────────────────
 
 export type HealthStatus = "healthy" | "degraded" | "unhealthy";

@@ -36,7 +36,7 @@ app.add_middleware(
 
 # ─── Routers ──────────────────────────────────────────────────────────────────
 
-from app.routers import health, ingest, mealplan, recipes, shopping, users, webhooks  # noqa: E402
+from app.routers import collections, health, ingest, mealplan, pantry, recipes, shopping, users, webhooks  # noqa: E402
 
 app.include_router(health.router, tags=["health"])
 
@@ -69,4 +69,14 @@ app.include_router(
     webhooks.router,
     prefix="/webhook",
     tags=["webhooks"],
+)
+app.include_router(
+    collections.router,
+    prefix="/collections",
+    tags=["collections"],
+)
+app.include_router(
+    pantry.router,
+    prefix="/pantry",
+    tags=["pantry"],
 )

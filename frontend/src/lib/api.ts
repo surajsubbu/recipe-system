@@ -23,6 +23,13 @@ import type {
   UserRoleUpdate,
   InviteRequest,
   DetailedHealth,
+  Collection,
+  CollectionCreate,
+  CollectionUpdate,
+  PaginatedCollections,
+  PantryItem,
+  PantryItemCreate,
+  PantryItemUpdate,
 } from "./types";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
@@ -222,6 +229,113 @@ export const usersApi = {
     apiFetch<void>("/users/invite", token, {
       method: "POST",
       body: JSON.stringify(data),
+    }),
+};
+
+// ─── Collections ──────────────────────────────────────────────────────────────
+
+export const collectionsApi = {
+  list: (
+    token: string | null,
+    page: number = 1,
+    pageSize: number = 20
+  ): Promise<PaginatedCollections> =>
+    apiFetch<PaginatedCollections>(
+      `/collections?page=${page}&page_size=${pageSize}`,
+      token
+    ),
+
+  get: (id: number, token: string | null): Promise<Collection> =>
+    apiFetch<Collection>(`/collections/${id}`, token),
+
+  create: (data: CollectionCreate, token: string | null): Promise<Collection> =>
+    apiFetch<Collection>("/collections", token, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  update: (
+    id: number,
+    data: CollectionUpdate,
+    token: string | null
+  ): Promise<Collection> =>
+    apiFetch<Collection>(`/collections/${id}`, token, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+
+  delete: (id: number, token: string | null): Promise<void> =>
+    apiFetch<void>(`/collections/${id}`, token, {
+      method: "DELETE",
+    }),
+
+  listRecipes: (
+    id: number,
+    token: string | null,
+    page: number = 1,
+    pageSize: number = 20
+  ): Promise<PaginatedRecipes> =>
+    apiFetch<PaginatedRecipes>(
+      `/collections/${id}/recipes?page=${page}&page_size=${pageSize}`,
+      token
+    ),
+
+  addRecipe: (
+    collectionId: number,
+    recipeId: number,
+    token: string | null
+  ): Promise<void> =>
+    apiFetch<void>(`/collections/${collectionId}/recipes/${recipeId}`, token, {
+      method: "POST",
+    }),
+
+  removeRecipe: (
+    collectionId: number,
+    recipeId: number,
+    token: string | null
+  ): Promise<void> =>
+    apiFetch<void>(`/collections/${collectionId}/recipes/${recipeId}`, token, {
+      method: "DELETE",
+    }),
+};
+
+// ─── Pantry Items ─────────────────────────────────────────────────────────────
+
+export const pantryApi = {
+  list: (token: string | null): Promise<Record<string, PantryItem[]>> =>
+    apiFetch<Record<string, PantryItem[]>>("/pantry", token),
+
+  create: (data: PantryItemCreate, token: string | null): Promise<PantryItem> =>
+    apiFetch<PantryItem>("/pantry/items", token, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  update: (
+    id: number,
+    data: PantryItemUpdate,
+    token: string | null
+  ): Promise<PantryItem> =>
+    apiFetch<PantryItem>(`/pantry/items/${id}`, token, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+
+  delete: (id: number, token: string | null): Promise<void> =>
+    apiFetch<void>(`/pantry/items/${id}`, token, {
+      method: "DELETE",
+    }),
+
+  clear: (token: string | null): Promise<void> =>
+    apiFetch<void>("/pantry/clear", token, {
+      method: "DELETE",
+    }),
+
+  importFromShoppingList: (
+    token: string | null
+  ): Promise<PantryItem[]> =>
+    apiFetch<PantryItem[]>("/pantry/import-shopping-list", token, {
+      method: "POST",
     }),
 };
 

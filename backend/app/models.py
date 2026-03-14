@@ -47,7 +47,7 @@ class MealType(str, PyEnum):
     snack     = "snack"
 
 
-# ─── Association table ────────────────────────────────────────────────────────
+# ─── Association tables ───────────────────────────────────────────────────────
 
 recipe_tag = Table(
     "recipe_tag",
@@ -55,6 +55,8 @@ recipe_tag = Table(
     Column("recipe_id", Integer, ForeignKey("recipes.id",  ondelete="CASCADE"), primary_key=True),
     Column("tag_id",    Integer, ForeignKey("tags.id",     ondelete="CASCADE"), primary_key=True),
 )
+
+# collection_recipe is defined as a model below (not a simple Table) since it has extra columns
 
 
 # ─── Models ───────────────────────────────────────────────────────────────────
@@ -97,11 +99,12 @@ class Recipe(Base):
     updated_at           = Column(DateTime(timezone=True), onupdate=func.now())
 
     # Relationships
-    owner:       Optional["User"]      = relationship("User",       back_populates="recipes",     foreign_keys=[owner_id])
-    ingredients: List["Ingredient"]    = relationship("Ingredient", back_populates="recipe",      cascade="all, delete-orphan")
-    steps:       List["Step"]          = relationship("Step",       back_populates="recipe",      cascade="all, delete-orphan", order_by="Step.order")
-    tags:        List["Tag"]           = relationship("Tag",        secondary=recipe_tag,         back_populates="recipes")
-    meal_plans:  List["MealPlan"]      = relationship("MealPlan",   back_populates="recipe")
+    owner:               Optional["User"]            = relationship("User",              back_populates="recipes",     foreign_keys=[owner_id])
+    ingredients:         List["Ingredient"]          = relationship("Ingredient",        back_populates="recipe",      cascade="all, delete-orphan")
+    steps:               List["Step"]                = relationship("Step",             back_populates="recipe",      cascade="all, delete-orphan", order_by="Step.order")
+    tags:                List["Tag"]                 = relationship("Tag",              secondary=recipe_tag,         back_populates="recipes")
+    meal_plans:          List["MealPlan"]            = relationship("MealPlan",         back_populates="recipe")
+    collection_recipes:  List["CollectionRecipe"]    = relationship("CollectionRecipe",  back_populates="recipe")
 
 
 class Ingredient(Base):
@@ -180,3 +183,51 @@ class MealPlan(Base):
 
     owner:  Optional["User"]   = relationship("User",   back_populates="meal_plans")
     recipe: Optional["Recipe"] = relationship("Recipe", back_populates="meal_plans")
+
+
+# ─── Collections ──────────────────────────────────────────────────────────────
+
+class Collection(Base):
+    """Personal recipe cookbook."""
+
+    __tablename__ = "collections"
+
+    id              = Column(Integer, primary_key=True, index=True)
+    owner_id        = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    name            = Column(String(255), nullable=False)
+    description     = Column(Text, nullable=True)
+    cover_image_url = Column(String(2048), nullable=True)
+    created_at      = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    owner: Optional["User"]        = relationship("User")
+    collection_recipes: List["CollectionRecipe"] = relationship("CollectionRecipe", back_populates="collection", cascade="all, delete-orphan")
+
+
+class PantryItem(Base):
+    """User's pantry inventory items."""
+
+    __tablename__ = "pantry_items"
+
+    id              = Column(Integer, primary_key=True, index=True)
+    owner_id        = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    normalized_name = Column(String(500), nullable=False)
+    quantity        = Column(Float, nullable=True)
+    unit            = Column(String(100), nullable=True)
+    category        = Column(String(100), nullable=True)
+    expires_on      = Column(Date, nullable=True)
+    updated_at      = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    owner: Optional["User"] = relationship("User")
+
+
+class CollectionRecipe(Base):
+    """Association between collections and recipes with timestamps."""
+
+    __tablename__ = "collection_recipes"
+
+    collection_id = Column(Integer, ForeignKey("collections.id", ondelete="CASCADE"), primary_key=True)
+    recipe_id     = Column(Integer, ForeignKey("recipes.id",     ondelete="CASCADE"), primary_key=True)
+    added_at      = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    collection: Optional["Collection"] = relationship("Collection", back_populates="collection_recipes")
+    recipe:     Optional["Recipe"]     = relationship("Recipe",     back_populates="collection_recipes")

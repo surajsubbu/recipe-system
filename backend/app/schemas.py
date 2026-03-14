@@ -222,6 +222,67 @@ class UserRoleUpdate(BaseModel):
     role: UserRole
 
 
+# ─── Collections ──────────────────────────────────────────────────────────────
+
+class CollectionCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    cover_image_url: Optional[str] = None
+
+
+class CollectionUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    cover_image_url: Optional[str] = None
+
+
+class CollectionOut(BaseModel):
+    id: int
+    name: str
+    description: Optional[str] = None
+    cover_image_url: Optional[str] = None
+    created_at: datetime
+    recipe_count: int
+
+    model_config = {"from_attributes": True}
+
+
+class PaginatedCollections(BaseModel):
+    total: int
+    page: int
+    page_size: int
+    items: List[CollectionOut]
+
+
+# ─── Pantry Items ─────────────────────────────────────────────────────────────
+
+class PantryItemCreate(BaseModel):
+    normalized_name: str
+    quantity: Optional[float] = None
+    unit: Optional[str] = None
+    category: Optional[str] = None
+    expires_on: Optional[date] = None
+
+
+class PantryItemUpdate(BaseModel):
+    quantity: Optional[float] = None
+    unit: Optional[str] = None
+    category: Optional[str] = None
+    expires_on: Optional[date] = None
+
+
+class PantryItemOut(BaseModel):
+    id: int
+    normalized_name: str
+    quantity: Optional[float] = None
+    unit: Optional[str] = None
+    category: Optional[str] = None
+    expires_on: Optional[date] = None
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 # ─── Webhooks ─────────────────────────────────────────────────────────────────
 
 class HAWebhookPayload(BaseModel):
