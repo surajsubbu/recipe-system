@@ -168,6 +168,7 @@ def _extract_subtitles(url: str) -> Optional[str]:
             "skip_download": True,
             "quiet": True,
             "no_warnings": True,
+            "ignore_no_formats_error": True,  # don't abort if format resolution fails
             "outtmpl": os.path.join(tmpdir, "%(id)s.%(ext)s"),
         }
 

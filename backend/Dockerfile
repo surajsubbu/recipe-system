@@ -17,6 +17,10 @@ RUN pip install --upgrade pip setuptools wheel
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Always upgrade yt-dlp to the latest version — YouTube changes formats frequently
+# and an outdated yt-dlp causes "format not available" errors for all downloads
+RUN pip install --no-cache-dir -U yt-dlp
+
 # Copy application source
 COPY . .
 
