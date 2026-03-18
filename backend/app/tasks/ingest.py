@@ -163,23 +163,24 @@ def ingest_url_task(self, url: str, user_id: int) -> dict:
                                     step.video_timestamp_seconds = ts_map[step.order]
                     except Exception:
                         pass  # timestamps are nice-to-have
-            elif transcript and yt_result.timestamped_transcript:
-                # Build [Ns] prefixed text so the LLM can map steps to timestamps
-                ts_lines = [
-                    f"[{int(t)}s] {text}"
-                    for t, text in yt_result.timestamped_transcript
-                ]
-                combined_text = "\n".join(ts_lines) + f"\n\n---\nVideo description:\n{description[:2000]}"
-            elif transcript:
-                combined_text = f"{transcript}\n\n---\nVideo description:\n{description[:2000]}"
             else:
-                combined_text = description
+                if transcript and yt_result.timestamped_transcript:
+                    # Build [Ns] prefixed text so the LLM can map steps to timestamps
+                    ts_lines = [
+                        f"[{int(t)}s] {text}"
+                        for t, text in yt_result.timestamped_transcript
+                    ]
+                    combined_text = "\n".join(ts_lines) + f"\n\n---\nVideo description:\n{description[:2000]}"
+                elif transcript:
+                    combined_text = f"{transcript}\n\n---\nVideo description:\n{description[:2000]}"
+                else:
+                    combined_text = description
 
-            recipe_data: RecipeData = from_text(
-                text=combined_text,
-                source_url=url,
-                title_hint=title,
-            )
+                recipe_data: RecipeData = from_text(
+                    text=combined_text,
+                    source_url=url,
+                    title_hint=title,
+                )
 
             # Use the YouTube thumbnail as the recipe image if none was found
             if not recipe_data.image_url and thumbnail_url:
