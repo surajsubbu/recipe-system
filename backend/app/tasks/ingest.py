@@ -282,6 +282,7 @@ def _save_recipe(
         cook_time_minutes=recipe_data.cook_time,
         prep_time_minutes=recipe_data.prep_time,
         servings=recipe_data.servings,
+        cuisine=getattr(recipe_data, 'cuisine', None),
         transcript=recipe_data.transcript,
         owner_id=user_id,
     )

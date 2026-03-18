@@ -52,6 +52,7 @@ class RecipeData:
     cook_time: Optional[int] = None   # minutes
     prep_time: Optional[int] = None   # minutes
     servings: Optional[int] = None
+    cuisine: Optional[str] = None
     transcript: Optional[str] = None   # video transcript (YouTube recipes)
     ingredients: list[IngredientData] = field(default_factory=list)
     steps: list[StepData] = field(default_factory=list)
@@ -168,6 +169,7 @@ def from_structured(data: dict[str, Any], source_url: str = "") -> RecipeData:
         if inst
     ]
 
+    raw_cuisine = data.get("cuisine")
     return RecipeData(
         title=data.get("title") or "Untitled Recipe",
         description=data.get("description"),
@@ -176,6 +178,7 @@ def from_structured(data: dict[str, Any], source_url: str = "") -> RecipeData:
         cook_time=data.get("cook_time"),
         prep_time=data.get("prep_time"),
         servings=_parse_servings(data.get("yields")),
+        cuisine=raw_cuisine.strip().title() if raw_cuisine else None,
         ingredients=parsed_ingredients,
         steps=steps,
         tags=[t.lower().strip() for t in (data.get("tags") or []) if t],
@@ -205,6 +208,7 @@ Return ONLY a valid JSON object with this exact schema:
     { "order": 2, "instruction": "Mix flour and salt together.",   "timer_seconds": null, "video_timestamp_seconds": null, "section": "For the Crust" },
     { "order": 3, "instruction": "Bake for 25 minutes.",           "timer_seconds": 1500, "video_timestamp_seconds": null, "section": "For the Filling" }
   ],
+  "cuisine": "Italian",
   "tags": ["baking", "dessert", "vegetarian"]
 }
 
@@ -223,6 +227,7 @@ Rules:
   or a dish with sauce + main), set section to a descriptive label like \
   "For the Crust", "For the Filling", "For the Sauce". If the recipe has \
   only one part, set section to null for all ingredients and steps
+- cuisine: the cuisine style (e.g. "Italian", "Mexican", "Japanese", "Indian", "American") or null if unclear
 - tags: 1–5 lowercase culinary descriptors
 - If the text contains no clear recipe, still return your best attempt \
   with whatever information is available
@@ -369,6 +374,7 @@ def _dict_to_recipe_data(data: dict[str, Any], source_url: str) -> RecipeData:
             )
         )
 
+    raw_cuisine = data.get("cuisine")
     return RecipeData(
         title=(data.get("title") or "Imported Recipe").strip(),
         description=data.get("description"),
@@ -377,6 +383,7 @@ def _dict_to_recipe_data(data: dict[str, Any], source_url: str) -> RecipeData:
         cook_time=data.get("cook_time"),
         prep_time=data.get("prep_time"),
         servings=_parse_servings(data.get("servings")),
+        cuisine=raw_cuisine.strip().title() if raw_cuisine else None,
         ingredients=ingredients,
         steps=steps,
         tags=[t.lower().strip() for t in (data.get("tags") or []) if t],
