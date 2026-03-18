@@ -11,7 +11,7 @@ import { ServingsScaler } from "@/components/ServingsScaler";
 import { IngredientChecklist } from "@/components/IngredientChecklist";
 import { StepTimer } from "@/components/StepTimer";
 import { PageSpinner } from "@/components/LoadingSpinner";
-import { cn, formatCookTime, formatDate, totalTime, convertUnit, isYouTubeUrl, getYouTubeVideoId, type UnitSystem } from "@/lib/utils";
+import { cn, formatCookTime, formatDate, totalTime, convertUnit, isYouTubeUrl, getYouTubeVideoId, isIngredientStaple, type UnitSystem } from "@/lib/utils";
 import {
   ArrowLeftIcon,
   ClockIcon,
@@ -65,7 +65,10 @@ export default function RecipeDetailPage() {
   async function addToShopping() {
     try {
       const token = await getToken();
-      await shoppingApi.generateFromRecipe(Number(id), token);
+      const stapleIds = recipe?.ingredients
+        .filter(isIngredientStaple)
+        .map((i) => i.id) ?? [];
+      await shoppingApi.generateFromRecipe(Number(id), token, stapleIds);
       setInShoppingList(true);
       showToast("Added to shopping list!");
     } catch {

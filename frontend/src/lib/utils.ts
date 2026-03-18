@@ -221,6 +221,27 @@ export function difficultyColor(
   }
 }
 
+// ─── Pantry staples detection ─────────────────────────────────────────────────
+
+/**
+ * Common household pantry staples that are almost always on hand.
+ * Matched against normalized_name or lowercased name.
+ * Intentionally narrow — pasta, canned tomatoes, rice are NOT included
+ * even though they're in the "pantry" category.
+ */
+const STAPLE_NAMES = new Set([
+  "water", "salt", "black pepper", "pepper", "white pepper",
+  "oil", "olive oil", "vegetable oil", "canola oil", "sunflower oil",
+  "butter", "sugar", "brown sugar", "powdered sugar", "icing sugar",
+  "flour", "all-purpose flour", "baking soda", "baking powder",
+  "vinegar", "soy sauce",
+]);
+
+export function isIngredientStaple(ing: { normalized_name?: string | null; name: string }): boolean {
+  const name = (ing.normalized_name ?? ing.name).toLowerCase().trim();
+  return STAPLE_NAMES.has(name);
+}
+
 // ─── Ingredient emoji icons ───────────────────────────────────────────────────
 
 const INGREDIENT_NAME_EMOJIS: Record<string, string> = {

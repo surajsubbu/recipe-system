@@ -164,11 +164,16 @@ export const shoppingApi = {
 
   generateFromRecipe: (
     recipeId: number,
-    token: string | null
-  ): Promise<ShoppingList> =>
-    apiFetch<ShoppingList>(`/shopping-list/generate/${recipeId}`, token, {
+    token: string | null,
+    excludeIds?: number[]
+  ): Promise<ShoppingList> => {
+    const qs = excludeIds && excludeIds.length > 0
+      ? `?${excludeIds.map((id) => `exclude_ids=${id}`).join("&")}`
+      : "";
+    return apiFetch<ShoppingList>(`/shopping-list/generate/${recipeId}${qs}`, token, {
       method: "POST",
-    }),
+    });
+  },
 
   updateItem: (
     itemId: number,

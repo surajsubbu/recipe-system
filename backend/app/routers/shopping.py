@@ -11,7 +11,7 @@ DELETE /shopping-list/clear-checked     → remove all checked items
 One active list per user — we always operate on the most recent one and
 create it automatically if it doesn't exist.
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -131,6 +131,7 @@ async def add_item(
 )
 async def generate_from_recipe(
     recipe_id: int,
+    exclude_ids: list[int] = Query(default=[]),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -155,7 +156,10 @@ async def generate_from_recipe(
         key = (_singularize(existing_item.name), (existing_item.unit or "").lower())
         existing_lookup[key] = existing_item
 
+    exclude_set = set(exclude_ids)
     for ing in recipe.ingredients:
+        if ing.id in exclude_set:
+            continue
         ing_name = ing.normalized_name or ing.name
         key = (_singularize(ing_name), (ing.unit or "").lower())
         match = existing_lookup.get(key)
