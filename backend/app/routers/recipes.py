@@ -10,7 +10,7 @@ Permissions:
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, or_, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -337,4 +337,4 @@ async def delete_recipe(
     if not recipe:
         raise HTTPException(status_code=404, detail="Recipe not found")
     _assert_can_modify(recipe, current_user)
-    await db.delete(recipe)
+    await db.execute(delete(Recipe).where(Recipe.id == recipe_id))

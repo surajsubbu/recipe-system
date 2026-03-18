@@ -32,8 +32,13 @@ _WHISPER_MODEL_SIZE: str = os.getenv("WHISPER_MODEL_SIZE", "small")
 # Process-level Whisper model cache (loaded on first YouTube job)
 _whisper_model = None
 
-# Preferred subtitle languages (order matters)
-_SUBTITLE_LANGS = ["en", "en-US", "en-GB", "en-orig", "en-IN"]
+# Preferred subtitle languages — English first, then common Indian + global languages.
+# Order matters: yt-dlp picks the first match. The LLM will translate non-English text.
+_SUBTITLE_LANGS = [
+    "en", "en-US", "en-GB", "en-orig", "en-IN",
+    "hi", "ta", "te", "ml", "kn", "bn", "mr", "gu", "pa",  # Indian languages
+    "es", "fr", "de", "pt", "it", "ar", "zh", "ja", "ko",  # other common languages
+]
 
 
 # ─── Result dataclass ─────────────────────────────────────────────────────────

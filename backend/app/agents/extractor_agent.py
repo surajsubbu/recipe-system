@@ -231,6 +231,8 @@ Rules:
 - tags: 1–5 lowercase culinary descriptors
 - If the text contains no clear recipe, still return your best attempt \
   with whatever information is available
+- Always output in English regardless of the input language — translate \
+  titles, descriptions, ingredient names, and step instructions if needed
 - Return ONLY the JSON — no prose, no markdown fences
 """
 
