@@ -20,7 +20,7 @@ import logging
 import os
 import re
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 import yt_dlp
@@ -47,6 +47,7 @@ class YoutubeResult:
     duration_seconds: Optional[int] = None
     channel: Optional[str] = None
     transcript_source: str = "unknown"   # "subtitles" | "whisper"
+    timestamped_transcript: list = field(default_factory=list)  # list[tuple[float, str]]
 
 
 # ─── Public API ───────────────────────────────────────────────────────────────
@@ -77,7 +78,7 @@ def get_transcript(url: str) -> YoutubeResult:
 
     # Step 2: Try caption fast-path
     logger.info("[youtube] Trying subtitle extraction for: %r", meta.get("title"))
-    transcript = _extract_subtitles(url)
+    transcript, timestamped = _extract_subtitles_with_timestamps(url)
 
     if transcript:
         logger.info("[youtube] Subtitles found (%d chars)", len(transcript))
@@ -89,11 +90,12 @@ def get_transcript(url: str) -> YoutubeResult:
             duration_seconds=meta.get("duration"),
             channel=meta.get("uploader"),
             transcript_source="subtitles",
+            timestamped_transcript=timestamped,
         )
 
     # Step 3: Whisper fallback
     logger.info("[youtube] No subtitles — falling back to Whisper")
-    transcript = _whisper_transcribe(url)
+    transcript, timestamped = _whisper_transcribe_with_timestamps(url)
 
     return YoutubeResult(
         title=meta.get("title") or "",
@@ -103,6 +105,7 @@ def get_transcript(url: str) -> YoutubeResult:
         duration_seconds=meta.get("duration"),
         channel=meta.get("uploader"),
         transcript_source="whisper",
+        timestamped_transcript=timestamped,
     )
 
 
@@ -154,10 +157,12 @@ def _assert_supported(meta: dict) -> None:
 
 # ─── Subtitle extraction (fast path) ─────────────────────────────────────────
 
-def _extract_subtitles(url: str) -> Optional[str]:
+def _extract_subtitles_with_timestamps(url: str) -> tuple[Optional[str], list]:
     """
     Download subtitle/auto-caption files with yt-dlp (no audio download).
-    Returns parsed plain text, or None if no usable subtitles found.
+    Returns (plain_text, timestamped_list) where timestamped_list is
+    list[tuple[float, str]] of (start_seconds, text).
+    Returns (None, []) if no usable subtitles found.
     """
     with tempfile.TemporaryDirectory(prefix="recipe_yt_subs_") as tmpdir:
         ydl_opts = {
@@ -177,7 +182,7 @@ def _extract_subtitles(url: str) -> Optional[str]:
                 ydl.download([url])
         except Exception as exc:
             logger.debug("[youtube] Subtitle download error: %s", exc)
-            return None
+            return None, []
 
         # Scan for any .vtt file produced
         for fname in os.listdir(tmpdir):
@@ -187,11 +192,12 @@ def _extract_subtitles(url: str) -> Optional[str]:
                     text = open(fpath, encoding="utf-8").read()
                     transcript = _parse_vtt(text)
                     if len(transcript) > 150:   # sanity-check minimum length
-                        return transcript
+                        timestamped = _parse_vtt_with_timestamps(text)
+                        return transcript, timestamped
                 except Exception as exc:
                     logger.debug("[youtube] VTT parse error (%s): %s", fname, exc)
 
-    return None
+    return None, []
 
 
 def _parse_vtt(vtt_text: str) -> str:
@@ -242,12 +248,60 @@ def _parse_vtt(vtt_text: str) -> str:
     return " ".join(result)
 
 
+def _vtt_time_to_seconds(ts: str) -> float:
+    """Convert VTT timestamp (HH:MM:SS.mmm) to float seconds."""
+    parts = ts.strip().split(":")
+    try:
+        if len(parts) == 3:
+            return int(parts[0]) * 3600 + int(parts[1]) * 60 + float(parts[2])
+        elif len(parts) == 2:
+            return int(parts[0]) * 60 + float(parts[1])
+    except (ValueError, IndexError):
+        pass
+    return 0.0
+
+
+def _parse_vtt_with_timestamps(vtt_text: str) -> list:
+    """
+    Parse VTT and return list of (start_seconds, text) tuples.
+    Uses one representative entry per caption cue block (deduplicated).
+    """
+    segments: list[tuple[float, str]] = []
+    current_start: Optional[float] = None
+    seen_texts: set[str] = set()
+
+    for line in vtt_text.splitlines():
+        line = line.strip()
+        if not line:
+            current_start = None
+            continue
+        if re.match(r"^(WEBVTT|NOTE|Kind:|Language:|align:|position:)", line):
+            continue
+        if re.match(r"^\d+$", line):
+            continue
+        # Timestamp line — capture start time
+        ts_match = re.match(r"^(\d{2}:\d{2}[\d:.]+)\s*-->", line)
+        if ts_match:
+            current_start = _vtt_time_to_seconds(ts_match.group(1))
+            continue
+        # Text line
+        if current_start is not None:
+            clean = re.sub(r"<[^>]+>", "", line).strip()
+            if clean and clean not in seen_texts:
+                seen_texts.add(clean)
+                segments.append((current_start, clean))
+            current_start = None  # one text line per cue block
+
+    return segments
+
+
 # ─── Whisper transcription (slow path) ───────────────────────────────────────
 
-def _whisper_transcribe(url: str) -> str:
+def _whisper_transcribe_with_timestamps(url: str) -> tuple[str, list]:
     """
     Download audio with yt-dlp and transcribe with Whisper.
-    Uses a temporary directory that is cleaned up automatically.
+    Returns (plain_text, timestamped_list) where timestamped_list is
+    list[tuple[float, str]] of (start_seconds, text).
     """
     with tempfile.TemporaryDirectory(prefix="recipe_yt_audio_") as tmpdir:
         audio_path = _download_audio(url, tmpdir)
@@ -256,11 +310,14 @@ def _whisper_transcribe(url: str) -> str:
 
         model = _load_whisper()
         # faster-whisper returns (segments_generator, TranscriptionInfo)
-        segments, _info = model.transcribe(audio_path, language=None, vad_filter=True)
-        transcript = " ".join(seg.text for seg in segments).strip()
+        # Consume the generator once and build both outputs
+        segments_gen, _info = model.transcribe(audio_path, language=None, vad_filter=True)
+        segments_list = list(segments_gen)
+        transcript = " ".join(seg.text for seg in segments_list).strip()
+        timestamped = [(seg.start, seg.text.strip()) for seg in segments_list if seg.text.strip()]
 
-    logger.info("[youtube] Whisper done: %d chars", len(transcript))
-    return transcript
+    logger.info("[youtube] Whisper done: %d chars, %d segments", len(transcript), len(timestamped))
+    return transcript, timestamped
 
 
 def _download_audio(url: str, output_dir: str) -> str:
@@ -351,6 +408,47 @@ def _trim(text: Optional[str], max_len: int) -> str:
     if not text:
         return ""
     return text[:max_len]
+
+
+# ─── Recipe link extraction from YouTube descriptions ────────────────────────
+
+# Social / non-recipe domains to filter out
+_SKIP_DOMAINS = {
+    "instagram.com", "twitter.com", "x.com", "facebook.com", "tiktok.com",
+    "patreon.com", "ko-fi.com", "buymeacoffee.com", "paypal.com", "paypal.me",
+    "amazon.com", "amzn.to", "amzn.com", "bit.ly", "linktr.ee",
+    "youtube.com", "youtu.be", "discord.gg", "discord.com", "twitch.tv",
+    "pinterest.com", "linkedin.com", "snapchat.com", "reddit.com",
+    "spotify.com", "apple.com", "music.apple.com",
+}
+
+
+def extract_recipe_links(description: str) -> list[str]:
+    """
+    Extract HTTP URLs from a YouTube description, filtering out social media
+    and affiliate links. Returns URLs most likely to be recipe blog posts.
+    """
+    if not description:
+        return []
+
+    urls = re.findall(r"https?://[^\s<>\"']+", description)
+    recipe_links = []
+    for url in urls:
+        try:
+            from urllib.parse import urlparse
+            parsed = urlparse(url.rstrip(".,;:!?)"))
+            domain = parsed.hostname or ""
+            domain = domain.replace("www.", "")
+            if domain in _SKIP_DOMAINS:
+                continue
+            # Skip short URLs that are likely tracking/affiliate
+            if len(parsed.path) < 5 and not parsed.query:
+                continue
+            recipe_links.append(url.rstrip(".,;:!?)"))
+        except Exception:
+            continue
+
+    return recipe_links
 
 
 def preload_whisper() -> None:

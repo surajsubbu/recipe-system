@@ -30,6 +30,7 @@ class IngredientData:
     name: str
     amount: Optional[float] = None
     unit: Optional[str] = None
+    section: Optional[str] = None
 
 
 @dataclass
@@ -37,6 +38,8 @@ class StepData:
     order: int
     instruction: str
     timer_seconds: Optional[int] = None
+    video_timestamp_seconds: Optional[int] = None
+    section: Optional[str] = None
 
 
 @dataclass
@@ -44,6 +47,7 @@ class RecipeData:
     title: str
     description: Optional[str] = None
     source_url: Optional[str] = None
+    secondary_source_url: Optional[str] = None
     image_url: Optional[str] = None
     cook_time: Optional[int] = None   # minutes
     prep_time: Optional[int] = None   # minutes
@@ -192,14 +196,14 @@ Return ONLY a valid JSON object with this exact schema:
   "prep_time": 15,
   "servings": 4,
   "ingredients": [
-    { "name": "all-purpose flour", "amount": 2.0, "unit": "cups" },
-    { "name": "salt",              "amount": 1.0, "unit": "tsp"  },
-    { "name": "vanilla extract",   "amount": null, "unit": null  }
+    { "name": "all-purpose flour", "amount": 2.0, "unit": "cups", "section": "For the Crust" },
+    { "name": "salt",              "amount": 1.0, "unit": "tsp",  "section": "For the Crust" },
+    { "name": "vanilla extract",   "amount": null, "unit": null,  "section": "For the Filling" }
   ],
   "steps": [
-    { "order": 1, "instruction": "Preheat oven to 175°C (350°F).", "timer_seconds": null },
-    { "order": 2, "instruction": "Mix flour and salt together.",   "timer_seconds": null },
-    { "order": 3, "instruction": "Bake for 25 minutes.",           "timer_seconds": 1500 }
+    { "order": 1, "instruction": "Preheat oven to 175°C (350°F).", "timer_seconds": null, "video_timestamp_seconds": null, "section": "For the Crust" },
+    { "order": 2, "instruction": "Mix flour and salt together.",   "timer_seconds": null, "video_timestamp_seconds": null, "section": "For the Crust" },
+    { "order": 3, "instruction": "Bake for 25 minutes.",           "timer_seconds": 1500, "video_timestamp_seconds": null, "section": "For the Filling" }
   ],
   "tags": ["baking", "dessert", "vegetarian"]
 }
@@ -208,6 +212,17 @@ Rules:
 - amount must be a number (float) or null — never a string like "to taste"
 - timer_seconds: set ONLY when the step mentions an explicit duration \
   (e.g. "bake 25 min" → 1500, "simmer for 10 minutes" → 600), otherwise null
+- video_timestamp_seconds: map each step to the EARLIEST timestamp in the \
+  transcript where that action begins. When the source text contains timestamps \
+  in the format "[Ns] text" (e.g. "[120s] now we'll make the crust"), set this \
+  to the integer seconds. Timestamps carry across sections — e.g. if the crust \
+  section starts at 120s and the filling at 300s, use those values. \
+  Example: "[120s] now we'll make the crust" → video_timestamp_seconds: 120. \
+  If no timestamps are present, set to null
+- section: when the recipe has multiple parts (e.g. a pie with crust + filling, \
+  or a dish with sauce + main), set section to a descriptive label like \
+  "For the Crust", "For the Filling", "For the Sauce". If the recipe has \
+  only one part, set section to null for all ingredients and steps
 - tags: 1–5 lowercase culinary descriptors
 - If the text contains no clear recipe, still return your best attempt \
   with whatever information is available
@@ -324,11 +339,13 @@ def _dict_to_recipe_data(data: dict[str, Any], source_url: str) -> RecipeData:
         if not name:
             continue
         amount_raw = item.get("amount")
+        section_raw = item.get("section")
         ingredients.append(
             IngredientData(
                 name=name,
                 amount=float(amount_raw) if amount_raw is not None else None,
                 unit=item.get("unit"),
+                section=section_raw if section_raw else None,
             )
         )
 
@@ -340,11 +357,15 @@ def _dict_to_recipe_data(data: dict[str, Any], source_url: str) -> RecipeData:
         if not instruction:
             continue
         timer_raw = item.get("timer_seconds")
+        vts_raw = item.get("video_timestamp_seconds")
+        section_raw = item.get("section")
         steps.append(
             StepData(
                 order=item.get("order") or len(steps) + 1,
                 instruction=instruction,
                 timer_seconds=int(timer_raw) if timer_raw else None,
+                video_timestamp_seconds=int(vts_raw) if vts_raw else None,
+                section=section_raw if section_raw else None,
             )
         )
 

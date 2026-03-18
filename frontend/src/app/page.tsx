@@ -9,7 +9,7 @@ import type { RecipeSummary } from "@/lib/types";
 import { RecipeCard, RecipeCardSkeleton } from "@/components/RecipeCard";
 import { BeakerIcon, PlusCircleIcon, UserCircleIcon } from "@heroicons/react/24/outline";
 
-const CUISINES = [
+const FALLBACK_CUISINES = [
   { label: "🍝 Italian", q: "italian" },
   { label: "🍜 Asian", q: "asian" },
   { label: "🌮 Mexican", q: "mexican" },
@@ -17,6 +17,13 @@ const CUISINES = [
   { label: "🥗 Healthy", q: "healthy" },
   { label: "⚡ Quick", q: "quick" },
 ];
+
+const CUISINE_EMOJIS: Record<string, string> = {
+  italian: "🍝", asian: "🍜", mexican: "🌮", indian: "🫕",
+  chinese: "🥡", japanese: "🍣", thai: "🍛", french: "🥐",
+  greek: "🥙", korean: "🍲", mediterranean: "🫒", american: "🍔",
+  spanish: "🥘", vietnamese: "🍜", "middle eastern": "🧆",
+};
 
 function greeting() {
   const h = new Date().getHours();
@@ -32,16 +39,23 @@ export default function HomePage() {
   const router = useRouter();
   const [recipes, setRecipes] = useState<RecipeSummary[]>([]);
   const [pantryCount, setPantryCount] = useState<number | null>(null);
+  const [cuisines, setCuisines] = useState<{ label: string; q: string }[]>(FALLBACK_CUISINES);
   const [loading, setLoading] = useState(true);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [greetingText, setGreetingText] = useState("");
+
+  useEffect(() => {
+    setGreetingText(greeting());
+  }, []);
 
   useEffect(() => {
     (async () => {
       try {
         const token = await getToken();
-        const [recipeData, pantryData] = await Promise.all([
+        const [recipeData, pantryData, cuisineData] = await Promise.all([
           recipesApi.list({ page: 1, page_size: 6 }, token),
           pantryApi.list(token),
+          recipesApi.cuisines(token).catch(() => []),
         ]);
         setRecipes(recipeData.items);
         const count = Object.values(pantryData).reduce(
@@ -49,6 +63,15 @@ export default function HomePage() {
           0
         );
         setPantryCount(count);
+        if (cuisineData.length > 0) {
+          setCuisines(
+            cuisineData.map((c) => {
+              const lower = c.cuisine.toLowerCase();
+              const emoji = CUISINE_EMOJIS[lower] || "🍽️";
+              return { label: `${emoji} ${c.cuisine}`, q: lower };
+            })
+          );
+        }
       } catch {
         // silently ignore — pages still render with defaults
       } finally {
@@ -70,7 +93,7 @@ export default function HomePage() {
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground">
-            {greeting()}{firstName ? `, ${firstName}` : ""}
+            {greetingText}{firstName ? `, ${firstName}` : ""}
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">What are you cooking today?</p>
         </div>
@@ -163,10 +186,10 @@ export default function HomePage() {
           Browse by Cuisine
         </h2>
         <div className="flex gap-2 overflow-x-auto scrollbar-none pb-1">
-          {CUISINES.map(({ label, q }) => (
+          {cuisines.map(({ label, q }) => (
             <Link
               key={q}
-              href={`/recipes?search=${encodeURIComponent(q)}`}
+              href={`/recipes?cuisine=${encodeURIComponent(q)}`}
               className="flex-shrink-0 rounded-full border border-border bg-card px-4 py-2 text-sm font-medium text-foreground transition-colors hover:border-primary/50 hover:text-primary"
             >
               {label}

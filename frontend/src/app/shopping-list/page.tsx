@@ -5,7 +5,7 @@ import { useAuth } from "@clerk/nextjs";
 import { shoppingApi, pantryApi } from "@/lib/api";
 import type { ShoppingList, ShoppingItem, IngredientCategory } from "@/lib/types";
 import { PageSpinner } from "@/components/LoadingSpinner";
-import { cn, capitalize } from "@/lib/utils";
+import { cn, capitalize, getIngredientImageUrl, getIngredientEmoji } from "@/lib/utils";
 import {
   TrashIcon,
   CheckIcon,
@@ -151,6 +151,20 @@ export default function ShoppingListPage() {
     }
   }
 
+  async function clearAll() {
+    if (!confirm("Remove ALL items from your shopping list?")) return;
+    setClearing(true);
+    try {
+      const token = await getToken();
+      await shoppingApi.clearAll(token);
+      setList((prev) => prev ? { ...prev, items: [] } : prev);
+    } catch {
+      setError("Failed to clear items.");
+    } finally {
+      setClearing(false);
+    }
+  }
+
   if (loading) return <PageSpinner />;
 
   const items = list?.items ?? [];
@@ -170,15 +184,27 @@ export default function ShoppingListPage() {
             </p>
           )}
         </div>
-        {checkedCount > 0 && (
-          <button
-            onClick={clearChecked}
-            disabled={clearing}
-            className="flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:border-red-500/50 hover:text-red-400 disabled:opacity-50"
-          >
-            <TrashIcon className="h-4 w-4" aria-hidden="true" />
-            Clear checked
-          </button>
+        {items.length > 0 && (
+          <div className="flex gap-2">
+            {checkedCount > 0 && (
+              <button
+                onClick={clearChecked}
+                disabled={clearing}
+                className="flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:border-red-500/50 hover:text-red-400 disabled:opacity-50"
+              >
+                <TrashIcon className="h-4 w-4" aria-hidden="true" />
+                Clear checked
+              </button>
+            )}
+            <button
+              onClick={clearAll}
+              disabled={clearing}
+              className="flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:border-red-500/50 hover:text-red-400 disabled:opacity-50"
+            >
+              <TrashIcon className="h-4 w-4" aria-hidden="true" />
+              Clear all
+            </button>
+          </div>
         )}
       </div>
 
@@ -251,6 +277,35 @@ export default function ShoppingListPage() {
                         )}
                       </button>
 
+                      {/* Ingredient photo */}
+                      {(() => {
+                        const imgUrl = getIngredientImageUrl(item.name);
+                        return imgUrl ? (
+                          <>
+                            <img
+                              src={imgUrl}
+                              alt=""
+                              aria-hidden="true"
+                              width={24}
+                              height={24}
+                              className="rounded-full object-cover flex-shrink-0"
+                              onError={(e) => {
+                                e.currentTarget.style.display = "none";
+                                const sib = e.currentTarget.nextElementSibling as HTMLElement | null;
+                                if (sib) sib.removeAttribute("hidden");
+                              }}
+                            />
+                            <span aria-hidden="true" className="text-sm flex-shrink-0" hidden>
+                              {getIngredientEmoji(item.name, item.category ?? undefined)}
+                            </span>
+                          </>
+                        ) : (
+                          <span aria-hidden="true" className="text-sm flex-shrink-0">
+                            {getIngredientEmoji(item.name, item.category ?? undefined)}
+                          </span>
+                        );
+                      })()}
+
                       {/* Text */}
                       <span
                         className={cn(
@@ -272,15 +327,24 @@ export default function ShoppingListPage() {
                         onClick={() => addToPantry(item)}
                         disabled={addedToPantry.has(item.id)}
                         className={cn(
-                          "flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg transition-colors",
+                          "flex h-8 w-auto flex-shrink-0 items-center gap-1 rounded-lg px-2 text-xs font-medium transition-colors",
                           addedToPantry.has(item.id)
                             ? "text-green-400"
                             : "text-muted-foreground hover:text-primary"
                         )}
                         aria-label={`Add ${item.name} to pantry`}
-                        title="Add to pantry"
                       >
-                        <ArchiveBoxArrowDownIcon className="h-4 w-4" aria-hidden="true" />
+                        {addedToPantry.has(item.id) ? (
+                          <>
+                            <CheckIcon className="h-4 w-4" aria-hidden="true" />
+                            Added
+                          </>
+                        ) : (
+                          <>
+                            <ArchiveBoxArrowDownIcon className="h-4 w-4" aria-hidden="true" />
+                            Pantry
+                          </>
+                        )}
                       </button>
 
                       {/* Remove */}

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
 import { recipesApi } from "@/lib/api";
 import type { PaginatedRecipes, Tag } from "@/lib/types";
@@ -10,14 +11,19 @@ import { TagFilter } from "@/components/TagFilter";
 import { ChevronLeftIcon, ChevronRightIcon } from "@heroicons/react/24/outline";
 import { cn } from "@/lib/utils";
 import { useDebounce } from "@/lib/hooks";
+import { PageSpinner } from "@/components/LoadingSpinner";
 
 const PAGE_SIZE = 12;
 
-export default function RecipesPage() {
+function RecipesPageContent() {
   const { getToken } = useAuth();
+  const searchParams = useSearchParams();
+
   const [data, setData] = useState<PaginatedRecipes | null>(null);
   const [tags, setTags] = useState<Tag[]>([]);
-  const [search, setSearch] = useState("");
+  // Initialise search from ?search= URL param (set by cuisine chips on home page)
+  const [search, setSearch] = useState(() => searchParams.get("search") ?? "");
+  const [selectedCuisine, setSelectedCuisine] = useState<string | null>(() => searchParams.get("cuisine") ?? null);
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -36,16 +42,17 @@ export default function RecipesPage() {
           page_size: PAGE_SIZE,
           search: debouncedSearch || undefined,
           tag: selectedTag || undefined,
+          cuisine: selectedCuisine || undefined,
         },
         token
       );
       setData(result);
-    } catch (e) {
+    } catch {
       setError("Failed to load recipes.");
     } finally {
       setLoading(false);
     }
-  }, [page, debouncedSearch, selectedTag]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [page, debouncedSearch, selectedTag, selectedCuisine]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch tags once
   useEffect(() => {
@@ -62,7 +69,7 @@ export default function RecipesPage() {
   // Reset to page 1 when filters change
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, selectedTag]);
+  }, [debouncedSearch, selectedTag, selectedCuisine]);
 
   useEffect(() => {
     fetchRecipes();
@@ -86,6 +93,20 @@ export default function RecipesPage() {
         onChange={setSearch}
         className="mb-3"
       />
+
+      {/* Active cuisine filter */}
+      {selectedCuisine && (
+        <div className="mb-3 flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">Cuisine:</span>
+          <button
+            onClick={() => setSelectedCuisine(null)}
+            className="flex items-center gap-1 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary"
+          >
+            {selectedCuisine}
+            <span className="ml-1">×</span>
+          </button>
+        </div>
+      )}
 
       {/* Tag filter */}
       {tags.length > 0 && (
@@ -186,5 +207,13 @@ export default function RecipesPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function RecipesPage() {
+  return (
+    <Suspense fallback={<PageSpinner />}>
+      <RecipesPageContent />
+    </Suspense>
   );
 }

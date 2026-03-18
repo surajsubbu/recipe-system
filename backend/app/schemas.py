@@ -25,6 +25,7 @@ class IngredientBase(BaseModel):
     name: str
     amount: Optional[float] = None
     unit: Optional[str] = None
+    section: Optional[str] = None
 
 
 class IngredientCreate(IngredientBase):
@@ -45,6 +46,8 @@ class StepBase(BaseModel):
     order: int
     instruction: str
     timer_seconds: Optional[int] = None
+    video_timestamp_seconds: Optional[int] = None
+    section: Optional[str] = None
 
 
 class StepCreate(StepBase):
@@ -63,6 +66,7 @@ class RecipeBase(BaseModel):
     title: str
     description: Optional[str] = None
     source_url: Optional[str] = None
+    secondary_source_url: Optional[str] = None
     image_url: Optional[str] = None
     cook_time_minutes: Optional[int] = None
     prep_time_minutes: Optional[int] = None
@@ -83,6 +87,7 @@ class RecipeUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
     source_url: Optional[str] = None
+    secondary_source_url: Optional[str] = None
     image_url: Optional[str] = None
     cook_time_minutes: Optional[int] = None
     prep_time_minutes: Optional[int] = None

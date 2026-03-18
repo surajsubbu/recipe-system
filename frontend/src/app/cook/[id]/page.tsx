@@ -8,14 +8,15 @@ import type { Recipe, Step } from "@/lib/types";
 import { StepTimer } from "@/components/StepTimer";
 import { PageSpinner } from "@/components/LoadingSpinner";
 import { useWakeLock } from "@/lib/hooks";
-import { cn } from "@/lib/utils";
+import { cn, isYouTubeUrl, getYouTubeVideoId } from "@/lib/utils";
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
   XMarkIcon,
   LightBulbIcon,
+  VideoCameraIcon,
 } from "@heroicons/react/24/outline";
-import { LightBulbIcon as LightBulbSolid } from "@heroicons/react/24/solid";
+import { LightBulbIcon as LightBulbSolid, VideoCameraIcon as VideoCameraSolid } from "@heroicons/react/24/solid";
 
 export default function CookPage() {
   const { id } = useParams<{ id: string }>();
@@ -25,7 +26,14 @@ export default function CookPage() {
   const [recipe, setRecipe] = useState<Recipe | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentStep, setCurrentStep] = useState(0);
+  const [showVideo, setShowVideo] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
   const { supported: wakeLockSupported, active: wakeLockActive, request: requestWakeLock, release: releaseWakeLock } = useWakeLock();
+
+  function showToast(msg: string) {
+    setToast(msg);
+    setTimeout(() => setToast(null), 3000);
+  }
 
   useEffect(() => {
     (async () => {
@@ -33,8 +41,14 @@ export default function CookPage() {
         const token = await getToken();
         const r = await recipesApi.get(Number(id), token);
         setRecipe(r);
+        // Auto-show video for YouTube recipes
+        if (r.source_url && isYouTubeUrl(r.source_url)) {
+          setShowVideo(true);
+        }
         // Request wake lock when entering cook mode
-        requestWakeLock();
+        requestWakeLock().then(() => {
+          showToast("Screen will stay on while cooking");
+        });
       } catch {
         router.push(`/recipe/${id}`);
       } finally {
@@ -66,6 +80,9 @@ export default function CookPage() {
   const step = steps[currentStep];
   const isFirst = currentStep === 0;
   const isLast = currentStep === steps.length - 1;
+  const videoId = recipe.source_url && isYouTubeUrl(recipe.source_url)
+    ? getYouTubeVideoId(recipe.source_url)
+    : null;
 
   function prev() {
     if (!isFirst) setCurrentStep((s) => s - 1);
@@ -128,24 +145,57 @@ export default function CookPage() {
           ))}
         </div>
 
-        {/* Wake lock indicator */}
-        {wakeLockSupported && (
+        <div className="flex items-center gap-2">
+          {/* Video toggle (only for YouTube recipes) */}
+          {videoId && (
+            <button
+              onClick={() => setShowVideo((v) => !v)}
+              className={cn(
+                "flex h-10 w-10 items-center justify-center rounded-full",
+                showVideo ? "bg-primary/20 text-primary" : "bg-card text-muted-foreground"
+              )}
+              aria-label={showVideo ? "Hide video" : "Show video"}
+              title={showVideo ? "Hide video" : "Show video"}
+            >
+              {showVideo ? (
+                <VideoCameraSolid className="h-5 w-5" aria-hidden="true" />
+              ) : (
+                <VideoCameraIcon className="h-5 w-5" aria-hidden="true" />
+              )}
+            </button>
+          )}
+
+          {/* Wake lock toggle */}
           <button
-            onClick={() => (wakeLockActive ? releaseWakeLock() : requestWakeLock())}
+            onClick={() => {
+              if (!wakeLockSupported) return;
+              if (wakeLockActive) {
+                releaseWakeLock();
+                showToast("Screen lock off");
+              } else {
+                requestWakeLock().then(() => showToast("Screen stays on"));
+              }
+            }}
+            disabled={!wakeLockSupported}
             className={cn(
-              "flex h-10 w-10 items-center justify-center rounded-full",
-              wakeLockActive ? "bg-primary/20 text-primary" : "bg-card text-muted-foreground"
+              "flex h-10 items-center gap-1.5 rounded-full px-3",
+              !wakeLockSupported
+                ? "bg-card text-muted-foreground/40 cursor-not-allowed"
+                : wakeLockActive
+                ? "bg-primary/20 text-primary"
+                : "bg-card text-muted-foreground"
             )}
             aria-label={wakeLockActive ? "Screen lock active" : "Keep screen on"}
-            title={wakeLockActive ? "Screen stays on" : "Tap to keep screen on"}
+            title={!wakeLockSupported ? "Screen wake lock not supported by this browser" : wakeLockActive ? "Screen stays on" : "Tap to keep screen on"}
           >
             {wakeLockActive ? (
               <LightBulbSolid className="h-5 w-5" aria-hidden="true" />
             ) : (
               <LightBulbIcon className="h-5 w-5" aria-hidden="true" />
             )}
+            <span className="text-xs font-medium">{wakeLockActive ? "Screen on" : "Screen off"}</span>
           </button>
-        )}
+        </div>
       </div>
 
       {/* Recipe title */}
@@ -153,8 +203,29 @@ export default function CookPage() {
         {recipe.title}
       </p>
 
+      {/* Inline video player (YouTube step seek) */}
+      {showVideo && videoId && (
+        <div className="mx-4 mt-2 aspect-video overflow-hidden rounded-xl bg-black">
+          <iframe
+            key={`${videoId}-${step.video_timestamp_seconds ?? 0}`}
+            src={`https://www.youtube.com/embed/${videoId}?autoplay=1&start=${step.video_timestamp_seconds ?? 0}`}
+            title="Recipe video"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+            className="h-full w-full"
+          />
+        </div>
+      )}
+
       {/* Step content — takes all remaining space */}
       <div className="flex flex-1 flex-col justify-center px-6 py-8">
+        {/* Section header (if different from previous step) */}
+        {step.section && (currentStep === 0 || step.section !== steps[currentStep - 1]?.section) && (
+          <p className="mb-2 text-center text-xs font-bold uppercase tracking-wider text-muted-foreground">
+            {step.section}
+          </p>
+        )}
+
         {/* Step number */}
         <p className="mb-3 text-center text-sm font-semibold text-primary">
           Step {currentStep + 1} of {steps.length}
@@ -214,6 +285,17 @@ export default function CookPage() {
           )}
         </div>
       </div>
+
+      {/* Toast */}
+      {toast && (
+        <div
+          className="fixed bottom-20 left-1/2 z-50 -translate-x-1/2 rounded-xl bg-card px-4 py-2.5 text-sm font-medium text-foreground shadow-lg"
+          role="alert"
+          aria-live="assertive"
+        >
+          {toast}
+        </div>
+      )}
     </div>
   );
 }

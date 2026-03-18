@@ -47,12 +47,20 @@ async def add_pantry_item(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    from app.agents.normalizer_agent import _keyword_categorize  # noqa: PLC0415
+
+    name = data.normalized_name.strip().lower()
+    category = data.category
+    # If no category provided or it's "other", try keyword lookup
+    if not category or category == "other":
+        category = _keyword_categorize(name)
+
     item = PantryItem(
         owner_id=current_user.id,
-        normalized_name=data.normalized_name.strip().lower(),
+        normalized_name=name,
         quantity=data.quantity,
         unit=data.unit,
-        category=data.category,
+        category=category,
         expires_on=data.expires_on,
     )
     db.add(item)

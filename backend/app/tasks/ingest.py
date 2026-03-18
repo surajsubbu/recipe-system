@@ -116,13 +116,62 @@ def ingest_url_task(self, url: str, user_id: int) -> dict:
                 logger.warning("[ingest] Could not extract transcript: %s", exc)
                 # Continue with description only if transcript fails
 
-            # ── Step 2a: Extract from transcript (preferred) + description ────
+            # ── Try to find and scrape a recipe blog link from the description ──
+            secondary_source_url = None
+            structured_from_link = None
+            try:
+                from app.services.youtube import extract_recipe_links  # noqa: PLC0415
+                recipe_links = extract_recipe_links(description)
+                if recipe_links:
+                    _progress(self, "Found recipe link in description, scraping…")
+                    from app.services.scraper import scrape_url  # noqa: PLC0415
+                    for link in recipe_links[:3]:  # try up to 3 links
+                        try:
+                            scrape = scrape_url(link)
+                            if scrape.structured:
+                                structured_from_link = scrape
+                                secondary_source_url = link
+                                logger.info("[ingest] Scraped structured recipe from: %s", link)
+                                break
+                        except Exception as link_exc:
+                            logger.debug("[ingest] Failed to scrape %s: %s", link, link_exc)
+                            continue
+            except Exception as exc:
+                logger.debug("[ingest] Recipe link extraction failed: %s", exc)
+
+            # ── Step 2a: Extract recipe data ─────────────────────────────────
             _progress(self, "Extracting recipe from video…")
-            if transcript:
-                # Put transcript first — it has the detailed ingredient amounts
-                # and step-by-step instructions. Cap description to 500 chars
-                # so transcript dominates the context window.
-                combined_text = f"{transcript}\n\n---\nVideo description:\n{description[:500]}"
+
+            if structured_from_link and structured_from_link.structured:
+                # Use the structured data from the blog link (more reliable)
+                recipe_data = from_structured(structured_from_link.data, source_url=url)
+                # Supplement with transcript timestamps if available
+                if transcript and yt_result.timestamped_transcript:
+                    # Re-extract just for timestamps from transcript
+                    ts_lines = [
+                        f"[{int(t)}s] {text}"
+                        for t, text in yt_result.timestamped_transcript
+                    ]
+                    ts_text = "\n".join(ts_lines)
+                    try:
+                        ts_recipe = from_text(text=ts_text, source_url=url, title_hint=title)
+                        # Map timestamps from transcript extraction to structured steps
+                        if ts_recipe.steps:
+                            ts_map = {s.order: s.video_timestamp_seconds for s in ts_recipe.steps if s.video_timestamp_seconds}
+                            for step in recipe_data.steps:
+                                if step.order in ts_map and step.video_timestamp_seconds is None:
+                                    step.video_timestamp_seconds = ts_map[step.order]
+                    except Exception:
+                        pass  # timestamps are nice-to-have
+            elif transcript and yt_result.timestamped_transcript:
+                # Build [Ns] prefixed text so the LLM can map steps to timestamps
+                ts_lines = [
+                    f"[{int(t)}s] {text}"
+                    for t, text in yt_result.timestamped_transcript
+                ]
+                combined_text = "\n".join(ts_lines) + f"\n\n---\nVideo description:\n{description[:2000]}"
+            elif transcript:
+                combined_text = f"{transcript}\n\n---\nVideo description:\n{description[:2000]}"
             else:
                 combined_text = description
 
@@ -138,6 +187,10 @@ def ingest_url_task(self, url: str, user_id: int) -> dict:
 
             # Store transcript only when non-empty (None → not shown in UI)
             recipe_data.transcript = transcript if transcript else None
+
+            # Store secondary source URL if we found a recipe blog
+            if secondary_source_url:
+                recipe_data.secondary_source_url = secondary_source_url
 
         else:  # web_recipe
             _progress(self, "Scraping recipe page…")
@@ -155,6 +208,10 @@ def ingest_url_task(self, url: str, user_id: int) -> dict:
                     source_url=url,
                     title_hint=scrape.data.get("title", ""),
                 )
+
+            # Apply scraped image when LLM didn't find one
+            if not recipe_data.image_url and scrape.data.get("image"):
+                recipe_data.image_url = scrape.data["image"]
 
         logger.info(
             "[ingest] Extracted: %r — %d ingredients, %d steps, %d tags",
@@ -219,6 +276,7 @@ def _save_recipe(
         title=recipe_data.title,
         description=recipe_data.description,
         source_url=recipe_data.source_url,
+        secondary_source_url=getattr(recipe_data, 'secondary_source_url', None),
         image_url=recipe_data.image_url,
         cook_time_minutes=recipe_data.cook_time,
         prep_time_minutes=recipe_data.prep_time,
@@ -243,6 +301,7 @@ def _save_recipe(
             category=(
                 norm.category if norm else "other"
             ),
+            section=getattr(ing, 'section', None),
         ))
 
     # ── Steps ──────────────────────────────────────────────────────────────────
@@ -252,6 +311,8 @@ def _save_recipe(
             order=step.order,
             instruction=step.instruction,
             timer_seconds=step.timer_seconds,
+            video_timestamp_seconds=step.video_timestamp_seconds,
+            section=getattr(step, 'section', None),
         ))
 
     # ── Tags (get-or-create) ───────────────────────────────────────────────────

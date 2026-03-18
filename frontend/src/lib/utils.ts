@@ -179,6 +179,31 @@ export function isYouTubeUrl(url: string): boolean {
   }
 }
 
+/**
+ * Extract the YouTube video ID from a URL.
+ * Handles youtube.com/watch?v=ID, youtu.be/ID, youtube.com/shorts/ID, etc.
+ * Returns null if the ID cannot be determined.
+ */
+export function getYouTubeVideoId(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.replace(/^www\./, "");
+    if (host === "youtu.be") {
+      return parsed.pathname.slice(1) || null;
+    }
+    if (host === "youtube.com" || host === "m.youtube.com") {
+      const v = parsed.searchParams.get("v");
+      if (v) return v;
+      // /shorts/ID or /live/ID
+      const match = parsed.pathname.match(/\/(?:shorts|live|embed)\/([^/?]+)/);
+      if (match) return match[1];
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 // ─── Difficulty badge colour ──────────────────────────────────────────────────
 
 export function difficultyColor(
@@ -196,6 +221,85 @@ export function difficultyColor(
   }
 }
 
+// ─── Ingredient emoji icons ───────────────────────────────────────────────────
+
+const INGREDIENT_NAME_EMOJIS: Record<string, string> = {
+  // Vegetables
+  "onion": "🧅", "garlic": "🧄", "tomato": "🍅", "carrot": "🥕",
+  "potato": "🥔", "bell pepper": "🫑", "pepper": "🌶️", "lettuce": "🥬",
+  "spinach": "🥬", "mushroom": "🍄", "corn": "🌽", "broccoli": "🥦",
+  "cucumber": "🥒", "avocado": "🥑", "eggplant": "🍆", "celery": "🌿",
+  "zucchini": "🥒", "kale": "🥬", "cabbage": "🥬", "pea": "🫛",
+  // Fruits
+  "lemon": "🍋", "lime": "🍋", "orange": "🍊", "apple": "🍎",
+  "banana": "🍌", "strawberry": "🍓", "blueberry": "🫐", "mango": "🥭",
+  "pineapple": "🍍", "grape": "🍇", "cherry": "🍒", "coconut": "🥥",
+  // Proteins
+  "chicken": "🍗", "beef": "🥩", "pork": "🥩", "lamb": "🥩",
+  "salmon": "🐟", "tuna": "🐟", "shrimp": "🦐", "egg": "🥚",
+  "tofu": "🫘", "bacon": "🥓",
+  // Dairy
+  "milk": "🥛", "cheese": "🧀", "butter": "🧈", "cream": "🥛",
+  "yogurt": "🥛", "parmesan": "🧀", "mozzarella": "🧀",
+  // Grains / Pantry
+  "flour": "🌾", "sugar": "🍬", "salt": "🧂", "rice": "🍚",
+  "pasta": "🍝", "bread": "🍞", "olive oil": "🫒", "oil": "🫒",
+  "honey": "🍯", "vanilla": "🫙", "chocolate": "🍫", "cocoa": "🍫",
+  // Herbs / Spices
+  "basil": "🌿", "parsley": "🌿", "cilantro": "🌿", "thyme": "🌿",
+  "rosemary": "🌿", "oregano": "🌿", "ginger": "🫚", "cinnamon": "🫚",
+  "cumin": "🫚", "paprika": "🫚", "chili": "🌶️", "turmeric": "🫚",
+  // Liquids
+  "water": "💧", "wine": "🍷", "beer": "🍺", "broth": "🍲",
+  "stock": "🍲", "vinegar": "🍶", "soy sauce": "🥢", "lemon juice": "🍋",
+  // Nuts / Seeds
+  "almond": "🌰", "walnut": "🌰", "peanut": "🥜", "sesame": "🌱",
+  "cashew": "🌰", "pecan": "🌰",
+  // Beans / Legumes
+  "bean": "🫘", "lentil": "🫘", "chickpea": "🫘",
+};
+
+const CATEGORY_EMOJIS: Record<string, string> = {
+  "produce": "🥕",
+  "dairy": "🥛",
+  "meat": "🥩",
+  "seafood": "🐟",
+  "pantry": "🫙",
+  "spices": "🧂",
+  "bakery": "🍞",
+  "frozen": "🧊",
+  "beverages": "🥤",
+  "condiments": "🥫",
+  "other": "🥄",
+};
+
+export function getIngredientEmoji(name: string, category?: string | null): string {
+  const nameLower = name.toLowerCase();
+  for (const [key, emoji] of Object.entries(INGREDIENT_NAME_EMOJIS)) {
+    if (nameLower.includes(key)) return emoji;
+  }
+  if (category && CATEGORY_EMOJIS[category]) {
+    return CATEGORY_EMOJIS[category];
+  }
+  return "🥄";
+}
+
+// ─── Ingredient image (TheMealDB CDN) ────────────────────────────────────────
+
+/**
+ * Return a TheMealDB ingredient image URL for a normalized ingredient name.
+ * Example: "olive oil" → "https://www.themealdb.com/images/ingredients/Olive%20Oil-Small.png"
+ * Returns null if normalizedName is empty/null.
+ */
+export function getIngredientImageUrl(normalizedName?: string | null): string | null {
+  if (!normalizedName) return null;
+  const name = normalizedName
+    .split(" ")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+  return `https://www.themealdb.com/images/ingredients/${encodeURIComponent(name)}-Small.png`;
+}
+
 // ─── Unit conversion (Original/Metric/Imperial) ────────────────────────────────
 
 export type UnitSystem = "original" | "metric" | "imperial";
@@ -204,6 +308,17 @@ interface UnitConversion {
   amount: number;
   unit: string;
 }
+
+// Volume units — used to determine whether metric output should be ml vs g
+const VOLUME_UNITS = new Set([
+  "tsp", "teaspoon", "teaspoons",
+  "tbsp", "tablespoon", "tablespoons",
+  "fl oz", "fl.oz", "fluid ounce",
+  "cup", "cups", "c",
+  "ml", "milliliter", "milliliters",
+  "l", "liter", "liters",
+  "pint", "quart",
+]);
 
 // Metric conversions (common cooking units to grams/ml)
 const METRIC_CONVERSIONS: Record<string, number> = {
@@ -255,11 +370,11 @@ export function convertUnit(
 
   if (toSystem === "metric") {
     // Try to convert to metric (grams or ml)
-    const grams = METRIC_CONVERSIONS[unit];
-    if (grams) {
+    const factor = METRIC_CONVERSIONS[unit];
+    if (factor) {
       return {
-        amount: parseFloat((amount * grams).toFixed(1)),
-        unit: unit.includes("cup") || unit.includes("tbsp") || unit.includes("tsp") || unit.includes("fl") ? "ml" : "g",
+        amount: parseFloat((amount * factor).toFixed(1)),
+        unit: VOLUME_UNITS.has(unit) ? "ml" : "g",
       };
     }
   }
@@ -270,7 +385,7 @@ export function convertUnit(
     if (factor) {
       return {
         amount: parseFloat((amount * factor).toFixed(2)),
-        unit: unit.includes("ml") || unit.includes("l") ? "fl oz" : "oz",
+        unit: VOLUME_UNITS.has(unit) ? "fl oz" : "oz",
       };
     }
   }

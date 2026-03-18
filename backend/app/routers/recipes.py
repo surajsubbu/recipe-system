@@ -80,12 +80,14 @@ async def list_recipes(
     page_size: int = Query(20, ge=1, le=100),
     search: Optional[str] = Query(None, description="Full-text search on title and description"),
     tags: Optional[List[str]] = Query(None, description="Filter by tag names (AND logic)"),
+    cuisine: Optional[str] = Query(None, description="Filter by cuisine (exact match, case-insensitive)"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """Return a paginated list of recipes, optionally filtered by search text and tags."""
     # ── build base query ──
     base = select(Recipe).options(selectinload(Recipe.tags))
+    base = base.where(Recipe.owner_id == current_user.id)
 
     if search:
         term = f"%{search.strip()}%"
@@ -95,6 +97,9 @@ async def list_recipes(
                 Recipe.description.ilike(term),
             )
         )
+
+    if cuisine:
+        base = base.where(func.lower(Recipe.cuisine) == cuisine.strip().lower())
 
     if tags:
         # Each tag must match (successive inner joins act as AND)
@@ -122,6 +127,23 @@ async def list_recipes(
     recipes = result.scalars().unique().all()
 
     return PaginatedRecipes(total=total, page=page, page_size=page_size, items=list(recipes))
+
+
+# ─── GET /recipes/cuisines ────────────────────────────────────────────────────
+
+@router.get("/cuisines")
+async def list_cuisines(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Return distinct cuisine values with counts from user's recipes."""
+    result = await db.execute(
+        select(Recipe.cuisine, func.count(Recipe.id).label("count"))
+        .where(Recipe.owner_id == current_user.id, Recipe.cuisine.isnot(None), Recipe.cuisine != "")
+        .group_by(Recipe.cuisine)
+        .order_by(func.count(Recipe.id).desc())
+    )
+    return [{"cuisine": row[0], "count": row[1]} for row in result.all()]
 
 
 # ─── GET /recipes/tags ────────────────────────────────────────────────────────
@@ -154,12 +176,12 @@ async def cookable_recipes(
     if not pantry_set:
         return []
 
-    # Fetch all recipes with ingredients
+    # Fetch all recipes with ingredients (only current user's)
     recipes_result = await db.execute(
         select(Recipe).options(
             selectinload(Recipe.ingredients),
             selectinload(Recipe.tags),
-        )
+        ).where(Recipe.owner_id == current_user.id)
     )
     all_recipes = recipes_result.scalars().unique().all()
 
@@ -212,7 +234,13 @@ async def get_recipe(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return await _get_recipe_or_404(recipe_id, db)
+    recipe = await _get_recipe_or_404(recipe_id, db)
+    if recipe.owner_id != current_user.id and current_user.role != UserRole.admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have permission to view this recipe",
+        )
+    return recipe
 
 
 # ─── POST /recipes ────────────────────────────────────────────────────────────
@@ -264,8 +292,8 @@ async def update_recipe(
     _assert_can_modify(recipe, current_user)
 
     # Update scalar fields (skip None — partial update)
-    scalar_fields = ["title", "description", "source_url", "image_url",
-                     "cook_time_minutes", "prep_time_minutes", "servings",
+    scalar_fields = ["title", "description", "source_url", "secondary_source_url",
+                     "image_url", "cook_time_minutes", "prep_time_minutes", "servings",
                      "calories_per_serving", "cuisine", "difficulty"]
     for field in scalar_fields:
         value = getattr(data, field)
