@@ -77,11 +77,13 @@ export function NavBar() {
   }
 
   return (
-    <nav className="fixed left-0 top-0 bottom-0 z-50 flex w-16 flex-col border-r border-border bg-card/95 backdrop-blur-sm md:w-56">
+    <nav className="fixed left-0 top-0 bottom-0 z-50 flex w-16 flex-col border-r border-primary/10 bg-card/98 backdrop-blur-sm md:w-56">
       {/* App header */}
       <div className="flex items-center gap-2.5 border-b border-border px-3 py-5 md:px-4">
-        <span className="flex-shrink-0 text-2xl">🍳</span>
-        <span className="hidden truncate font-bold text-foreground md:block">Recipes</span>
+        <span className="flex-shrink-0 text-xl">⚡</span>
+        <span className="hidden truncate font-heading text-lg font-bold uppercase tracking-widest text-primary md:block">
+          Recipes
+        </span>
       </div>
 
       {/* Nav items */}
@@ -94,10 +96,10 @@ export function NavBar() {
                 href={href}
                 title={label}
                 className={cn(
-                  "flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors",
+                  "flex items-center gap-3 border-l-2 px-3 py-2.5 transition-all duration-150",
                   active
-                    ? "bg-primary/10 text-primary"
-                    : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                    ? "border-primary bg-primary/5 text-primary"
+                    : "border-transparent text-muted-foreground hover:bg-accent hover:text-foreground"
                 )}
                 aria-current={active ? "page" : undefined}
               >
@@ -126,10 +128,10 @@ export function NavBar() {
                 href={href}
                 title={label}
                 className={cn(
-                  "flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors",
+                  "flex items-center gap-3 border-l-2 px-3 py-2.5 transition-all duration-150",
                   active
-                    ? "bg-primary/10 text-primary"
-                    : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                    ? "border-primary bg-primary/5 text-primary"
+                    : "border-transparent text-muted-foreground hover:bg-accent hover:text-foreground"
                 )}
               >
                 <Icon className="h-5 w-5 flex-shrink-0" aria-hidden="true" />
@@ -145,10 +147,10 @@ export function NavBar() {
               href="/admin"
               title="Admin"
               className={cn(
-                "flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors",
+                "flex items-center gap-3 border-l-2 px-3 py-2.5 transition-all duration-150",
                 pathname === "/admin"
-                  ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                  ? "border-primary bg-primary/5 text-primary"
+                  : "border-transparent text-muted-foreground hover:bg-accent hover:text-foreground"
               )}
             >
               <ShieldCheckIcon className="h-5 w-5 flex-shrink-0" aria-hidden="true" />

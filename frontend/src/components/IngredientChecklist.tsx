@@ -173,13 +173,13 @@ export function IngredientChecklist({
       {sectionGroups.map(({ section, catGroups }) => (
         <div key={section ?? "_none"}>
           {section && (
-            <h3 className="mb-2 px-1 text-sm font-bold text-foreground">
+            <h3 className="mb-2 px-1 font-heading text-sm font-bold uppercase tracking-wide text-foreground">
               {section}
             </h3>
           )}
           {catGroups.map(({ cat, label, items }) => (
             <div key={`${section ?? ""}-${cat}`}>
-              <h3 className="mb-1 px-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              <h3 className="mb-1 inline-block px-2 py-0.5 font-heading text-xs font-semibold uppercase tracking-widest text-primary/70 border-l-2 border-primary/40">
                 {label}
               </h3>
               <ul className="space-y-1">

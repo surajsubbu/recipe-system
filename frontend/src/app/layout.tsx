@@ -1,12 +1,20 @@
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
+import { Barlow_Condensed, IBM_Plex_Sans } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import { NavBar } from "@/components/NavBar";
 import "./globals.css";
 
-const inter = Inter({
+const barlowCondensed = Barlow_Condensed({
   subsets: ["latin"],
-  variable: "--font-inter",
+  weight: ["400", "600", "700", "800"],
+  variable: "--font-heading",
+  display: "swap",
+});
+
+const ibmPlexSans = IBM_Plex_Sans({
+  subsets: ["latin"],
+  weight: ["300", "400", "500", "600"],
+  variable: "--font-body",
   display: "swap",
 });
 
@@ -36,7 +44,7 @@ export const viewport: Viewport = {
   initialScale:        1,
   maximumScale:        1,   // prevent double-tap zoom on recipe steps
   userScalable:        false,
-  themeColor:          "#111827",
+  themeColor:          "#0d0d0e",
   viewportFit:         "cover",  // allow content under iPhone notch
 };
 
@@ -54,7 +62,7 @@ export default function RootLayout({
         toggling it at runtime, because the app is designed dark-only.
       */}
       <html lang="en" className="dark">
-        <body className={`${inter.variable} antialiased`}>
+        <body className={`${barlowCondensed.variable} ${ibmPlexSans.variable} antialiased`}>
           <NavBar />
           <main className="ml-16 md:ml-56">
             {children}

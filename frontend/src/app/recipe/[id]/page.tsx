@@ -258,7 +258,7 @@ export default function RecipeDetailPage() {
           </button>
           <Link
             href={`/cook/${id}`}
-            className="flex min-h-touch flex-col items-center justify-center gap-1 rounded-xl bg-primary p-3 text-xs font-medium text-primary-foreground"
+            className="glow-primary flex min-h-touch flex-col items-center justify-center gap-1 rounded-xl bg-primary p-3 font-heading text-xs font-semibold uppercase tracking-wider text-primary-foreground transition-all"
           >
             <PlayIcon className="h-5 w-5" aria-hidden="true" />
             Cook Mode
