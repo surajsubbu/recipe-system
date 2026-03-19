@@ -64,7 +64,7 @@ export default function RootLayout({
       <html lang="en" className="dark">
         <body className={`${barlowCondensed.variable} ${ibmPlexSans.variable} antialiased`}>
           <NavBar />
-          <main className="ml-16 md:ml-56">
+          <main className="pb-16 md:ml-56 md:pb-0">
             {children}
           </main>
         </body>

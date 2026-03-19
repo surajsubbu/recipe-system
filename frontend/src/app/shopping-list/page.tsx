@@ -288,7 +288,7 @@ export default function ShoppingListPage() {
                               aria-hidden="true"
                               width={24}
                               height={24}
-                              className="rounded-full object-cover flex-shrink-0"
+                              className="h-6 w-6 rounded-full object-cover flex-shrink-0"
                               onError={(e) => {
                                 e.currentTarget.style.display = "none";
                                 const sib = e.currentTarget.nextElementSibling as HTMLElement | null;
@@ -309,7 +309,7 @@ export default function ShoppingListPage() {
                       {/* Text */}
                       <span
                         className={cn(
-                          "flex-1 text-sm",
+                          "min-w-0 flex-1 text-sm",
                           item.checked && "text-muted-foreground line-through"
                         )}
                       >
@@ -337,12 +337,12 @@ export default function ShoppingListPage() {
                         {addedToPantry.has(item.id) ? (
                           <>
                             <CheckIcon className="h-4 w-4" aria-hidden="true" />
-                            Added
+                            <span className="hidden sm:inline">Added</span>
                           </>
                         ) : (
                           <>
                             <ArchiveBoxArrowDownIcon className="h-4 w-4" aria-hidden="true" />
-                            Pantry
+                            <span className="hidden sm:inline">Pantry</span>
                           </>
                         )}
                       </button>

@@ -77,7 +77,44 @@ export function NavBar() {
   }
 
   return (
-    <nav className="fixed left-0 top-0 bottom-0 z-50 flex w-16 flex-col border-r border-primary/10 bg-card/98 backdrop-blur-sm md:w-56">
+    <>
+    {/* ── Bottom nav (mobile only) ─────────────────────────── */}
+    <nav className="fixed bottom-0 left-0 right-0 z-50 flex items-stretch border-t border-primary/10 bg-card/98 backdrop-blur-sm md:hidden">
+      {NAV_ITEMS.map(({ href, label, icon: Icon, activeIcon: ActiveIcon, isActive }) => {
+        const active = isActive(pathname);
+        return (
+          <Link
+            key={href}
+            href={href}
+            className={cn(
+              "flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-xs transition-colors",
+              active ? "text-primary" : "text-muted-foreground"
+            )}
+            aria-current={active ? "page" : undefined}
+          >
+            {active ? (
+              <ActiveIcon className="h-5 w-5" aria-hidden="true" />
+            ) : (
+              <Icon className="h-5 w-5" aria-hidden="true" />
+            )}
+            <span className="text-[10px] font-medium">{label}</span>
+          </Link>
+        );
+      })}
+      <Link
+        href="/shopping-list"
+        className={cn(
+          "flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-xs transition-colors",
+          pathname === "/shopping-list" ? "text-primary" : "text-muted-foreground"
+        )}
+      >
+        <ShoppingCartIcon className="h-5 w-5" aria-hidden="true" />
+        <span className="text-[10px] font-medium">List</span>
+      </Link>
+    </nav>
+
+    {/* ── Sidebar (desktop only) ───────────────────────────── */}
+    <nav className="fixed left-0 top-0 bottom-0 z-50 hidden w-56 flex-col border-r border-primary/10 bg-card/98 backdrop-blur-sm md:flex">
       {/* App header */}
       <div className="flex items-center gap-2.5 border-b border-border px-3 py-5 md:px-4">
         <span className="flex-shrink-0 text-xl">⚡</span>
@@ -196,5 +233,6 @@ export function NavBar() {
         </button>
       </div>
     </nav>
+    </>
   );
 }
