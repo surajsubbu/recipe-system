@@ -33,7 +33,7 @@ function greeting() {
 }
 
 export default function HomePage() {
-  const { getToken } = useAuth();
+  const { getToken, isLoaded, isSignedIn } = useAuth();
   const { user } = useUser();
   const { signOut } = useClerk();
   const router = useRouter();
@@ -49,6 +49,7 @@ export default function HomePage() {
   }, []);
 
   useEffect(() => {
+    if (!isLoaded || !isSignedIn) return;
     (async () => {
       try {
         const token = await getToken();
@@ -78,7 +79,7 @@ export default function HomePage() {
         setLoading(false);
       }
     })();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isLoaded, isSignedIn]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const firstName = user?.firstName ?? user?.username ?? null;
 
