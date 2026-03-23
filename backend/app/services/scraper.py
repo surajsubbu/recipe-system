@@ -78,6 +78,15 @@ def scrape_url(url: str) -> ScrapeResult:
 
         # Require at least a title + some ingredients to count as structured
         if data["title"] and data["ingredients"]:
+            if not data["instructions_list"] and not data.get("instructions"):
+                try:
+                    resp2 = requests.get(url, headers=_HEADERS, timeout=_REQUEST_TIMEOUT)
+                    resp2.raise_for_status()
+                    raw = _raw_scrape_from_soup(BeautifulSoup(resp2.text, "lxml"))
+                    data["raw_text"] = raw.data.get("raw_text", "")
+                    logger.debug("[scraper] Supplemental raw fetch for missing instructions")
+                except Exception as exc:
+                    logger.debug("[scraper] Supplemental raw fetch failed: %s", exc)
             logger.info(
                 "[scraper] recipe-scrapers OK: %r — %d ingredients, %d steps",
                 data["title"],
@@ -103,11 +112,12 @@ def scrape_url(url: str) -> ScrapeResult:
     # ── Attempt 1.5: JSON-LD Recipe extraction ───────────────────────────────
     jsonld_result = _extract_jsonld(soup)
     if jsonld_result is not None:
-        logger.info(
-            "[scraper] JSON-LD OK: %r — %d ingredients",
-            jsonld_result.data.get("title"),
-            len(jsonld_result.data.get("ingredients", [])),
-        )
+        # _extract_jsonld only reads; safe to mutate soup now for raw text
+        raw = _raw_scrape_from_soup(soup)
+        jsonld_result.data["raw_text"] = raw.data.get("raw_text", "")
+        if not jsonld_result.data.get("image"):
+            jsonld_result.data["image"] = raw.data.get("image")
+        logger.info("[scraper] JSON-LD OK: %r — raw_text captured", jsonld_result.data.get("title"))
         return jsonld_result
 
     # ── Attempt 2: raw HTML → text + og:image ────────────────────────────────

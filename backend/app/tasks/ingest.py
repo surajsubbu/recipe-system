@@ -145,6 +145,19 @@ def ingest_url_task(self, url: str, user_id: int) -> dict:
             if structured_from_link and structured_from_link.structured:
                 # Use the structured data from the blog link (more reliable)
                 recipe_data = from_structured(structured_from_link.data, source_url=url)
+                if not recipe_data.steps:
+                    logger.info("[ingest] Structured blog link had 0 steps — LLM fallback")
+                    _progress(self, "Blog link missing steps — extracting recipe with AI…")
+                    saved_title = recipe_data.title
+                    saved_image = recipe_data.image_url
+                    blog_raw = structured_from_link.data.get("raw_text", "")
+                    fallback_text = blog_raw or (
+                        f"{transcript}\n\n---\nVideo description:\n{description[:2000]}"
+                        if transcript else description
+                    )
+                    recipe_data = from_text(text=fallback_text, source_url=url, title_hint=saved_title or title)
+                    if not recipe_data.image_url:
+                        recipe_data.image_url = saved_image or thumbnail_url
                 # Supplement with transcript timestamps if available
                 if transcript and yt_result.timestamped_transcript:
                     # Re-extract just for timestamps from transcript
@@ -193,6 +206,88 @@ def ingest_url_task(self, url: str, user_id: int) -> dict:
             if secondary_source_url:
                 recipe_data.secondary_source_url = secondary_source_url
 
+        elif url_type == URLType.instagram:
+            # Phase 1: fast metadata (no audio download)
+            _progress(self, "Fetching Instagram post metadata…")
+            from app.services.instagram import get_instagram_metadata, transcribe_instagram  # noqa: PLC0415
+
+            meta = get_instagram_metadata(url)
+            title = meta.title
+            description = meta.description   # caption text
+            thumbnail_url = meta.thumbnail_url
+            transcript = ""
+
+            # Phase 2: check caption for recipe links (free, no audio needed)
+            secondary_source_url = None
+            structured_from_link = None
+            try:
+                from app.services.youtube import extract_recipe_links  # noqa: PLC0415
+                recipe_links = extract_recipe_links(description)
+                if recipe_links:
+                    _progress(self, "Found recipe link in caption, scraping…")
+                    from app.services.scraper import scrape_url  # noqa: PLC0415
+                    for link in recipe_links[:3]:
+                        try:
+                            scrape = scrape_url(link)
+                            if scrape.structured:
+                                structured_from_link = scrape
+                                secondary_source_url = link
+                                break
+                        except Exception as link_exc:
+                            logger.debug("[ingest] Caption link scrape failed %s: %s", link, link_exc)
+            except Exception as exc:
+                logger.debug("[ingest] Caption link extraction failed: %s", exc)
+
+            _progress(self, "Extracting recipe from Instagram post…")
+            if structured_from_link and structured_from_link.structured:
+                # Structured data from caption link — skip audio entirely
+                recipe_data = from_structured(structured_from_link.data, source_url=url)
+                if not recipe_data.steps:
+                    saved_title, saved_image = recipe_data.title, recipe_data.image_url
+                    blog_raw = structured_from_link.data.get("raw_text", "")
+                    if blog_raw:
+                        fallback_text = blog_raw
+                    elif description.strip():
+                        # Caption might have the recipe — try without audio first
+                        fallback_text = description
+                    else:
+                        # Last resort: download and transcribe audio
+                        _progress(self, "Transcribing Instagram audio for missing steps…")
+                        transcript = transcribe_instagram(url)
+                        fallback_text = f"{transcript}\n\n---\nCaption:\n{description}" if transcript else description
+                    recipe_data = from_text(text=fallback_text, source_url=url, title_hint=saved_title or title)
+                    if not recipe_data.image_url:
+                        recipe_data.image_url = saved_image or thumbnail_url
+            elif description.strip():
+                # Caption has content — try to extract recipe from it without audio
+                recipe_data = from_text(text=description, source_url=url, title_hint=title)
+                if not recipe_data.steps:
+                    # Caption wasn't enough — fall back to audio transcription
+                    logger.info("[ingest] Caption-only extraction yielded no steps — transcribing audio")
+                    _progress(self, "Transcribing Instagram audio…")
+                    transcript = transcribe_instagram(url)
+                    if transcript:
+                        combined = f"{transcript}\n\n---\nCaption:\n{description}"
+                        recipe_data = from_text(text=combined, source_url=url, title_hint=title)
+            else:
+                # No caption — must transcribe audio
+                _progress(self, "Transcribing Instagram audio…")
+                transcript = transcribe_instagram(url)
+                if not transcript.strip():
+                    raise RuntimeError(
+                        "Could not extract any content from this Instagram post — "
+                        "the caption was empty and audio transcription failed. "
+                        "This usually means Instagram requires authentication. "
+                        "Add an instagram.txt cookies file to /app/cookies/ to enable this."
+                    )
+                recipe_data = from_text(text=transcript, source_url=url, title_hint=title)
+
+            if not recipe_data.image_url and thumbnail_url:
+                recipe_data.image_url = thumbnail_url
+            recipe_data.transcript = transcript or None
+            if secondary_source_url:
+                recipe_data.secondary_source_url = secondary_source_url
+
         else:  # web_recipe
             _progress(self, "Scraping recipe page…")
             from app.services.scraper import scrape_url  # noqa: PLC0415
@@ -202,6 +297,16 @@ def ingest_url_task(self, url: str, user_id: int) -> dict:
             if scrape.structured:
                 _progress(self, "Parsing structured recipe data…")
                 recipe_data = from_structured(scrape.data, source_url=url)
+                if not recipe_data.steps:
+                    raw_text = scrape.data.get("raw_text", "")
+                    if raw_text:
+                        logger.info("[ingest] Structured scrape had 0 steps — LLM fallback")
+                        _progress(self, "Structured data missing steps — extracting with AI…")
+                        saved_title = recipe_data.title
+                        saved_image = recipe_data.image_url
+                        recipe_data = from_text(text=raw_text, source_url=url, title_hint=saved_title)
+                        if not recipe_data.image_url and saved_image:
+                            recipe_data.image_url = saved_image
             else:
                 _progress(self, "Extracting recipe with AI…")
                 recipe_data = from_text(
@@ -231,6 +336,10 @@ def ingest_url_task(self, url: str, user_id: int) -> dict:
             r.original_name: r
             for r in normalize_ingredients(ingredient_names)
         }
+
+        # ── Step 4b: Apply deterministic dietary tags ──────────────────────────
+        from app.agents.extractor_agent import apply_dietary_tags  # noqa: PLC0415
+        apply_dietary_tags(recipe_data, norm_map)
 
         # ── Step 5: Persist to database ────────────────────────────────────────
         _progress(self, "Saving recipe to database…")

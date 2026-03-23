@@ -11,7 +11,7 @@ import { ServingsScaler } from "@/components/ServingsScaler";
 import { IngredientChecklist } from "@/components/IngredientChecklist";
 import { StepTimer } from "@/components/StepTimer";
 import { PageSpinner } from "@/components/LoadingSpinner";
-import { cn, formatCookTime, formatDate, totalTime, convertUnit, isYouTubeUrl, getYouTubeVideoId, isIngredientStaple, type UnitSystem } from "@/lib/utils";
+import { cn, formatCookTime, formatDate, totalTime, convertUnit, isYouTubeUrl, getYouTubeVideoId, isInstagramUrl, isIngredientStaple, type UnitSystem } from "@/lib/utils";
 import {
   ArrowLeftIcon,
   ClockIcon,
@@ -138,7 +138,7 @@ export default function RecipeDetailPage() {
         </button>
       </div>
 
-      {/* Hero: YouTube embed or image */}
+      {/* Hero: YouTube embed, Instagram thumbnail+link, or plain image */}
       {recipe.source_url && isYouTubeUrl(recipe.source_url) ? (
         <div className="relative aspect-video w-full overflow-hidden bg-black">
           <iframe
@@ -149,6 +149,32 @@ export default function RecipeDetailPage() {
             className="absolute inset-0 h-full w-full"
           />
         </div>
+      ) : recipe.source_url && isInstagramUrl(recipe.source_url) && recipe.image_url ? (
+        <a
+          href={recipe.source_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="group relative block aspect-video w-full overflow-hidden bg-black"
+          aria-label="Watch on Instagram"
+        >
+          <Image
+            src={recipe.image_url}
+            alt={recipe.title}
+            fill
+            priority
+            className="object-cover opacity-80 transition-opacity group-hover:opacity-60"
+            sizes="(max-width: 672px) 100vw, 672px"
+          />
+          {/* Instagram play overlay */}
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-black/50 backdrop-blur-sm ring-2 ring-white/30 transition-transform group-hover:scale-110">
+              <PlayIcon className="h-7 w-7 translate-x-0.5 text-white" aria-hidden="true" />
+            </div>
+            <span className="rounded-full bg-black/50 px-3 py-1 text-xs font-semibold text-white backdrop-blur-sm">
+              Watch on Instagram
+            </span>
+          </div>
+        </a>
       ) : recipe.image_url ? (
         <div className="relative aspect-video w-full overflow-hidden bg-muted">
           <Image
@@ -309,7 +335,7 @@ export default function RecipeDetailPage() {
                 className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary"
               >
                 <GlobeAltIcon className="h-3.5 w-3.5" aria-hidden="true" />
-                {recipe.source_url && isYouTubeUrl(recipe.source_url) ? "Watch on YouTube" : "View original source"}
+                {isYouTubeUrl(recipe.source_url) ? "Watch on YouTube" : isInstagramUrl(recipe.source_url) ? "Watch on Instagram" : "View original source"}
               </a>
             )}
             {recipe.secondary_source_url && (

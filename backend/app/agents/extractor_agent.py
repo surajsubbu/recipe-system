@@ -209,7 +209,7 @@ Return ONLY a valid JSON object with this exact schema:
     { "order": 3, "instruction": "Bake for 25 minutes.",           "timer_seconds": 1500, "video_timestamp_seconds": null, "section": "For the Filling" }
   ],
   "cuisine": "Italian",
-  "tags": ["baking", "dessert", "vegetarian"]
+  "tags": ["lentils", "spinach", "dinner", "one-pot", "vegan"]
 }
 
 Rules:
@@ -228,7 +228,13 @@ Rules:
   "For the Crust", "For the Filling", "For the Sauce". If the recipe has \
   only one part, set section to null for all ingredients and steps
 - cuisine: the cuisine style (e.g. "Italian", "Mexican", "Japanese", "Indian", "American") or null if unclear
-- tags: 1–5 lowercase culinary descriptors
+- tags: 3–10 lowercase tags covering: (a) the 2–3 key ingredients \
+  (e.g. "lentils", "spinach", "tofu", "chicken", "chickpeas"), \
+  (b) meal type (e.g. "dinner", "breakfast", "dessert", "snack", "side-dish"), \
+  (c) cooking method if notable (e.g. "one-pot", "baked", "grilled", "no-cook", \
+  "air-fryer", "slow-cooker"), (d) dietary labels only if clearly evident from \
+  the text (e.g. "vegan", "vegetarian", "gluten-free"). \
+  Never use generic words like "recipe", "food", "dish", "cooking"
 - If the text contains no clear recipe, still return your best attempt \
   with whatever information is available
 - Always output in English regardless of the input language — translate \
@@ -390,3 +396,59 @@ def _dict_to_recipe_data(data: dict[str, Any], source_url: str) -> RecipeData:
         steps=steps,
         tags=[t.lower().strip() for t in (data.get("tags") or []) if t],
     )
+
+
+# ─── Dietary tag classifier ────────────────────────────────────────────────────
+
+# Ingredient name substrings that indicate non-vegan condiments/extras that may
+# fall into "pantry" or "condiments" rather than "meat"/"seafood"/"dairy".
+_NON_VEGAN_NAME_FRAGMENTS = frozenset({
+    "gelatin", "lard", "tallow", "suet",
+    "anchov", "fish sauce", "oyster sauce",
+})
+
+
+def apply_dietary_tags(recipe_data: "RecipeData", norm_map: dict) -> None:
+    """
+    Deterministically add or remove vegan/vegetarian tags based on the
+    normalised ingredient list produced by normalizer_agent.
+
+    Must be called AFTER normalisation so norm_map is populated.
+    Modifies recipe_data.tags in-place.
+    """
+    if not norm_map:
+        return
+
+    categories = {r.category for r in norm_map.values()}
+    names      = {r.normalized_name for r in norm_map.values()}
+
+    has_meat    = "meat"    in categories
+    has_seafood = "seafood" in categories
+    has_dairy   = "dairy"   in categories
+    has_eggs    = any(n == "egg" or n.startswith("egg ") for n in names)
+    has_honey   = "honey" in names
+    has_non_vegan_extra = any(
+        fragment in name
+        for name in names
+        for fragment in _NON_VEGAN_NAME_FRAGMENTS
+    )
+
+    is_vegetarian = not has_meat and not has_seafood
+    is_vegan      = (
+        is_vegetarian
+        and not has_dairy
+        and not has_eggs
+        and not has_honey
+        and not has_non_vegan_extra
+    )
+
+    tags = set(recipe_data.tags)
+    # Strip any LLM-generated dietary labels — replace with verified ones
+    tags -= {"vegan", "vegetarian", "non-vegetarian"}
+
+    if is_vegan:
+        tags.update({"vegan", "vegetarian"})  # vegan ⊂ vegetarian
+    elif is_vegetarian:
+        tags.add("vegetarian")
+
+    recipe_data.tags = sorted(tags)

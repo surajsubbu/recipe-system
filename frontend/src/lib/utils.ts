@@ -166,6 +166,19 @@ export function truncate(text: string, maxLength: number): string {
 /**
  * Return true if a string looks like a YouTube URL.
  */
+export function isInstagramUrl(url: string): boolean {
+  try {
+    const hostname = new URL(url).hostname.replace(/^www\./, "");
+    return (
+      hostname === "instagram.com" ||
+      hostname === "m.instagram.com" ||
+      hostname === "instagr.am"
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function isYouTubeUrl(url: string): boolean {
   try {
     const hostname = new URL(url).hostname.replace(/^www\./, "");

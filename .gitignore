@@ -3,6 +3,9 @@
 .env.local
 .env.*.local
 
+# Cookie files for authenticated scraping (contain real session credentials)
+backend/cookies/*.txt
+
 # ─── Python ───────────────────────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
