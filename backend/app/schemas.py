@@ -136,10 +136,50 @@ class IngestRequest(BaseModel):
 
     @field_validator("url")
     @classmethod
-    def url_must_be_non_empty(cls, v: str) -> str:
+    def url_must_be_safe(cls, v: str) -> str:
+        import ipaddress  # noqa: PLC0415
+        from urllib.parse import urlparse  # noqa: PLC0415
+
         v = v.strip()
         if not v:
-            raise ValueError("url must not be empty")
+            raise ValueError("URL must not be empty")
+        if len(v) > 2048:
+            raise ValueError("URL must be 2048 characters or fewer")
+
+        # Prepend scheme if missing so urlparse works
+        parse_target = v if "://" in v else f"https://{v}"
+        try:
+            parsed = urlparse(parse_target)
+        except Exception:
+            raise ValueError("Invalid URL")
+
+        if parsed.scheme not in ("http", "https"):
+            raise ValueError("Only http and https URLs are supported")
+
+        host = (parsed.hostname or "").lower()
+        if not host:
+            raise ValueError("URL must have a valid hostname")
+
+        # Block obvious localhost names
+        if host in ("localhost", "local", "broadcasthost"):
+            raise ValueError("URLs pointing to private or internal addresses are not allowed")
+
+        # Block raw IP addresses in private/reserved ranges (SSRF protection)
+        try:
+            addr = ipaddress.ip_address(host)
+            if (
+                addr.is_private
+                or addr.is_loopback
+                or addr.is_link_local
+                or addr.is_reserved
+                or addr.is_multicast
+            ):
+                raise ValueError("URLs pointing to private or internal addresses are not allowed")
+        except ValueError as exc:
+            if "private" in str(exc) or "internal" in str(exc):
+                raise
+            # Not a raw IP address — hostname is fine (we don't resolve DNS here)
+
         return v
 
 
