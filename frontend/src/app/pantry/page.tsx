@@ -13,7 +13,7 @@ import {
   ShoppingCartIcon,
   ArrowDownTrayIcon,
 } from "@heroicons/react/24/outline";
-import { cn } from "@/lib/utils";
+import { cn, getIngredientImageUrl, getIngredientEmoji } from "@/lib/utils";
 import { PageSpinner } from "@/components/LoadingSpinner";
 
 const CATEGORY_ICONS: Record<string, string> = {
@@ -402,13 +402,40 @@ function PantryItemRow({
     }
   }
 
+  const imgUrl = getIngredientImageUrl(item.normalized_name);
+
   return (
     <div
       className={cn(
-        "flex items-center justify-between rounded-xl border border-border bg-card px-4 py-3",
+        "flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3",
         isExpiringToday && "bg-warning/10 border-warning/30"
       )}
     >
+      {/* Ingredient photo */}
+      {imgUrl ? (
+        <>
+          <img
+            src={imgUrl}
+            alt=""
+            aria-hidden="true"
+            width={28}
+            height={28}
+            className="rounded-full object-cover flex-shrink-0"
+            onError={(e) => {
+              e.currentTarget.style.display = "none";
+              const sib = e.currentTarget.nextElementSibling as HTMLElement | null;
+              if (sib) sib.removeAttribute("hidden");
+            }}
+          />
+          <span aria-hidden="true" className="text-base flex-shrink-0" hidden>
+            {getIngredientEmoji(item.normalized_name, item.category ?? undefined)}
+          </span>
+        </>
+      ) : (
+        <span aria-hidden="true" className="text-base flex-shrink-0">
+          {getIngredientEmoji(item.normalized_name, item.category ?? undefined)}
+        </span>
+      )}
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-foreground capitalize">
           {item.normalized_name}

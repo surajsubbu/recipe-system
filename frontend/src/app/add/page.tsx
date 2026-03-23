@@ -5,31 +5,45 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
 import { ingestApi } from "@/lib/api";
 import type { IngestJobOut } from "@/lib/types";
-import { JobStatus, JobProgressBar } from "@/components/JobStatus";
-import { isYouTubeUrl } from "@/lib/utils";
-import {
-  LinkIcon,
-  PlayCircleIcon,
-  ArrowRightIcon,
-} from "@heroicons/react/24/outline";
+import { JobStatus } from "@/components/JobStatus";
+import { isYouTubeUrl, isInstagramUrl } from "@/lib/utils";
+import { LinkIcon, ArrowRightIcon } from "@heroicons/react/24/outline";
+
+function SiteFavicon({ domain, alt }: { domain: string; alt: string }) {
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={`https://www.google.com/s2/favicons?domain=${domain}&sz=32`}
+      alt={alt}
+      width={16}
+      height={16}
+      className="h-4 w-4 rounded-sm"
+    />
+  );
+}
+
+const SUPPORTED_SOURCES = [
+  { domain: "youtube.com",    label: "YouTube",     text: "Cooking videos (any language)" },
+  { domain: "instagram.com",  label: "Instagram",   text: "Reels & posts" },
+  { domain: "allrecipes.com", label: "AllRecipes",  text: "AllRecipes" },
+  { domain: "seriouseats.com",label: "Serious Eats",text: "Serious Eats" },
+  { domain: "minimalistbaker.com", label: "Minimalist Baker", text: "Minimalist Baker" },
+  { domain: "ohsheglows.com",     label: "Oh She Glows",     text: "Oh She Glows" },
+  { domain: "food52.com",     label: "Food52",      text: "Food52 & most recipe blogs" },
+];
 
 export default function AddPage() {
   const router = useRouter();
   const { getToken } = useAuth();
   const [url, setUrl] = useState("");
   const [jobId, setJobId] = useState<string | null>(null);
-  const [job, setJob] = useState<IngestJobOut | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const isYT = isYouTubeUrl(url);
+  const isIG = isInstagramUrl(url);
   const isValidUrl = (() => {
-    try {
-      new URL(url);
-      return true;
-    } catch {
-      return false;
-    }
+    try { new URL(url); return true; } catch { return false; }
   })();
 
   async function handleSubmit(e: React.FormEvent) {
@@ -38,14 +52,12 @@ export default function AddPage() {
     setSubmitting(true);
     setError(null);
     setJobId(null);
-    setJob(null);
     try {
       const token = await getToken();
       const result = await ingestApi.start({ url }, token);
       setJobId(result.job_id);
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Failed to start ingest";
-      setError(msg);
+      setError(e instanceof Error ? e.message : "Failed to start import");
     } finally {
       setSubmitting(false);
     }
@@ -60,12 +72,18 @@ export default function AddPage() {
     setJobId(null);
   }
 
+  const urlHint = isYT
+    ? { domain: "youtube.com", label: "YouTube", text: "Video detected — subtitles or audio transcription used to extract the recipe." }
+    : isIG
+    ? { domain: "instagram.com", label: "Instagram", text: "Reel detected — recipe extracted from caption and audio." }
+    : null;
+
   return (
     <div className="px-safe mx-auto max-w-lg px-4 pt-8">
       <h1 className="mb-2 text-2xl font-bold text-foreground">Add Recipe</h1>
       <p className="mb-6 text-sm text-muted-foreground">
-        Paste a recipe URL or YouTube video link. The AI will extract all the
-        details automatically.
+        Paste a link from YouTube, Instagram, or any recipe site. AI extracts
+        everything automatically.
       </p>
 
       {/* Input form */}
@@ -73,9 +91,11 @@ export default function AddPage() {
         <div className="relative">
           <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2">
             {isYT ? (
-              <PlayCircleIcon className="h-5 w-5 text-red-400" aria-hidden="true" />
+              <SiteFavicon domain="youtube.com" alt="YouTube" />
+            ) : isIG ? (
+              <SiteFavicon domain="instagram.com" alt="Instagram" />
             ) : (
-              <LinkIcon className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
+              <LinkIcon className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
             )}
           </div>
           <input
@@ -86,17 +106,16 @@ export default function AddPage() {
             required
             disabled={!!jobId}
             className="w-full rounded-xl border border-border bg-muted py-3 pl-10 pr-4 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
-            aria-label="Recipe or YouTube URL"
+            aria-label="Recipe URL"
           />
         </div>
 
         {/* URL type hint */}
-        {url && isValidUrl && (
-          <p className="text-xs text-muted-foreground">
-            {isYT
-              ? "📹 YouTube video detected — we'll transcribe the audio if subtitles aren't available."
-              : "🌐 Recipe URL detected — we'll scrape and extract the ingredients and steps."}
-          </p>
+        {url && isValidUrl && urlHint && (
+          <div className="flex items-start gap-2 text-xs text-muted-foreground">
+            <SiteFavicon domain={urlHint.domain} alt={urlHint.label} />
+            <span>{urlHint.text}</span>
+          </div>
         )}
 
         {error && (
@@ -111,47 +130,43 @@ export default function AddPage() {
           className="flex min-h-touch w-full items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {submitting ? "Starting…" : "Import Recipe"}
-          {!submitting && (
-            <ArrowRightIcon className="h-4 w-4" aria-hidden="true" />
-          )}
+          {!submitting && <ArrowRightIcon className="h-4 w-4" aria-hidden="true" />}
         </button>
       </form>
 
       {/* Job tracking */}
       {jobId && (
         <div className="mt-6 space-y-3">
-          <h2 className="text-sm font-semibold text-foreground">
-            Import Progress
-          </h2>
-          <JobStatus
-            jobId={jobId}
-            onDone={handleDone}
-            onError={handleError}
-          />
+          <h2 className="text-sm font-semibold text-foreground">Import Progress</h2>
+          <JobStatus jobId={jobId} onDone={handleDone} onError={handleError} />
         </div>
       )}
 
-      {/* Supported sites info */}
+      {/* Supported sources */}
       {!jobId && (
         <div className="mt-8">
           <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             Works with
           </h2>
-          <ul className="space-y-2 text-sm text-muted-foreground">
-            {[
-              { icon: "📹", text: "YouTube cooking videos (any language)" },
-              {
-                icon: "🌐",
-                text: "Most recipe sites (AllRecipes, Serious Eats, etc.)",
-              },
-              { icon: "📝", text: "Food blogs with structured recipe data" },
-              { icon: "🤖", text: "Any page — AI fallback extracts from text" },
-            ].map(({ icon, text }) => (
-              <li key={text} className="flex items-center gap-2">
-                <span aria-hidden="true">{icon}</span>
-                <span>{text}</span>
+          <ul className="space-y-2.5">
+            {SUPPORTED_SOURCES.map(({ domain, label, text }) => (
+              <li key={domain} className="flex items-center gap-2.5 text-sm text-muted-foreground">
+                <SiteFavicon domain={domain} alt={label} />
+                <span>
+                  <span className="font-medium text-foreground">{label}</span>
+                  {" — "}
+                  {text}
+                </span>
               </li>
             ))}
+            <li className="flex items-center gap-2.5 text-sm text-muted-foreground">
+              <span className="flex h-4 w-4 items-center justify-center text-xs" aria-hidden="true">🤖</span>
+              <span>
+                <span className="font-medium text-foreground">Anywhere else</span>
+                {" — "}
+                AI fallback extracts from any page
+              </span>
+            </li>
           </ul>
         </div>
       )}

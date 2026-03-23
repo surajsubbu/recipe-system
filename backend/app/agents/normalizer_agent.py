@@ -122,14 +122,19 @@ def _normalize_batch(names: list[str]) -> list[NormalizationResult]:
             results.append(NormalizationResult(
                 original_name=original,
                 normalized_name=original.lower().strip(),
-                category="other",
+                category=_keyword_categorize(original),
             ))
             continue
+        normalized_name = (item.get("normalized") or original).lower().strip()
+        category = _validate_category(item.get("category"))
+        # Second chance: if LLM returned "other", try keyword lookup
+        if category == "other":
+            category = _keyword_categorize(normalized_name)
         results.append(
             NormalizationResult(
                 original_name=original,
-                normalized_name=(item.get("normalized") or original).lower().strip(),
-                category=_validate_category(item.get("category")),
+                normalized_name=normalized_name,
+                category=category,
             )
         )
 
@@ -138,7 +143,7 @@ def _normalize_batch(names: list[str]) -> list[NormalizationResult]:
         results.append(NormalizationResult(
             original_name=name,
             normalized_name=name.lower().strip(),
-            category="other",
+            category=_keyword_categorize(name),
         ))
 
     return results
@@ -171,7 +176,116 @@ def _fallback(names: list[str]) -> list[NormalizationResult]:
         NormalizationResult(
             original_name=n,
             normalized_name=n.lower().strip(),
-            category="other",
+            category=_keyword_categorize(n),
         )
         for n in names
     ]
+
+
+# ─── Deterministic keyword-based categorization ────────────────────────────
+
+_KEYWORD_CATEGORIES: dict[str, str] = {
+    # Produce
+    "onion": "produce", "garlic": "produce", "tomato": "produce", "carrot": "produce",
+    "potato": "produce", "bell pepper": "produce", "pepper": "produce", "lettuce": "produce",
+    "spinach": "produce", "mushroom": "produce", "corn": "produce", "broccoli": "produce",
+    "cucumber": "produce", "avocado": "produce", "eggplant": "produce", "celery": "produce",
+    "zucchini": "produce", "kale": "produce", "cabbage": "produce", "pea": "produce",
+    "asparagus": "produce", "cauliflower": "produce", "sweet potato": "produce",
+    "squash": "produce", "beet": "produce", "radish": "produce", "turnip": "produce",
+    "green bean": "produce", "leek": "produce", "shallot": "produce", "scallion": "produce",
+    "green onion": "produce", "arugula": "produce", "chard": "produce", "fennel": "produce",
+    "artichoke": "produce", "okra": "produce", "jalape": "produce",
+    # Produce - fruits
+    "lemon": "produce", "lime": "produce", "orange": "produce", "apple": "produce",
+    "banana": "produce", "strawberry": "produce", "blueberry": "produce", "mango": "produce",
+    "pineapple": "produce", "grape": "produce", "cherry": "produce", "coconut": "produce",
+    "peach": "produce", "pear": "produce", "plum": "produce", "raspberry": "produce",
+    "cranberry": "produce", "fig": "produce", "pomegranate": "produce", "grapefruit": "produce",
+    # Dairy
+    "milk": "dairy", "cheese": "dairy", "butter": "dairy", "cream": "dairy",
+    "yogurt": "dairy", "parmesan": "dairy", "mozzarella": "dairy", "cheddar": "dairy",
+    "sour cream": "dairy", "cream cheese": "dairy", "ricotta": "dairy",
+    "gouda": "dairy", "brie": "dairy", "feta": "dairy", "goat cheese": "dairy",
+    "egg": "dairy", "eggs": "dairy", "whipping cream": "dairy", "half and half": "dairy",
+    "heavy cream": "dairy", "buttermilk": "dairy", "ghee": "dairy",
+    # Meat
+    "chicken": "meat", "beef": "meat", "pork": "meat", "lamb": "meat",
+    "turkey": "meat", "bacon": "meat", "sausage": "meat", "ham": "meat",
+    "ground beef": "meat", "ground turkey": "meat", "steak": "meat",
+    "veal": "meat", "duck": "meat", "brisket": "meat", "chorizo": "meat",
+    "prosciutto": "meat", "salami": "meat", "pepperoni": "meat",
+    # Seafood
+    "salmon": "seafood", "tuna": "seafood", "shrimp": "seafood", "cod": "seafood",
+    "tilapia": "seafood", "crab": "seafood", "lobster": "seafood", "scallop": "seafood",
+    "mussel": "seafood", "clam": "seafood", "oyster": "seafood", "anchovy": "seafood",
+    "sardine": "seafood", "halibut": "seafood", "trout": "seafood", "mahi": "seafood",
+    "calamari": "seafood", "squid": "seafood", "octopus": "seafood", "prawn": "seafood",
+    # Spices & Herbs
+    "basil": "spices", "parsley": "spices", "cilantro": "spices", "thyme": "spices",
+    "rosemary": "spices", "oregano": "spices", "ginger": "spices", "cinnamon": "spices",
+    "cumin": "spices", "paprika": "spices", "chili powder": "spices", "turmeric": "spices",
+    "nutmeg": "spices", "clove": "spices", "cardamom": "spices", "coriander": "spices",
+    "dill": "spices", "sage": "spices", "bay leaf": "spices", "mint": "spices",
+    "tarragon": "spices", "cayenne": "spices", "allspice": "spices",
+    "black pepper": "spices", "white pepper": "spices", "red pepper flake": "spices",
+    "chili flake": "spices", "vanilla": "spices", "saffron": "spices",
+    "curry powder": "spices", "garam masala": "spices", "five spice": "spices",
+    # Pantry & Dry Goods
+    "flour": "pantry", "sugar": "pantry", "salt": "pantry", "rice": "pantry",
+    "pasta": "pantry", "olive oil": "pantry", "oil": "pantry", "vegetable oil": "pantry",
+    "canola oil": "pantry", "sesame oil": "pantry", "coconut oil": "pantry",
+    "honey": "pantry", "maple syrup": "pantry", "molasses": "pantry",
+    "brown sugar": "pantry", "powdered sugar": "pantry",
+    "baking soda": "pantry", "baking powder": "pantry", "cornstarch": "pantry",
+    "corn starch": "pantry", "cocoa": "pantry", "chocolate": "pantry",
+    "chocolate chip": "pantry", "noodle": "pantry", "spaghetti": "pantry",
+    "penne": "pantry", "macaroni": "pantry", "couscous": "pantry", "quinoa": "pantry",
+    "oat": "pantry", "oatmeal": "pantry", "cereal": "pantry", "granola": "pantry",
+    "bean": "pantry", "lentil": "pantry", "chickpea": "pantry",
+    "canned tomato": "pantry", "tomato paste": "pantry", "tomato sauce": "pantry",
+    "diced tomato": "pantry", "crushed tomato": "pantry",
+    "almond": "pantry", "walnut": "pantry", "peanut": "pantry", "pecan": "pantry",
+    "cashew": "pantry", "pistachio": "pantry", "pine nut": "pantry",
+    "sesame seed": "pantry", "sunflower seed": "pantry", "flax": "pantry",
+    "raisin": "pantry", "dried cranberry": "pantry",
+    "breadcrumb": "pantry", "panko": "pantry", "cracker": "pantry",
+    "tortilla": "pantry", "wrap": "pantry", "pita": "pantry",
+    # Bakery
+    "bread": "bakery", "yeast": "bakery", "baguette": "bakery", "roll": "bakery",
+    "croissant": "bakery", "muffin": "bakery", "cake": "bakery",
+    # Condiments & Sauces
+    "ketchup": "condiments", "mustard": "condiments", "mayonnaise": "condiments",
+    "mayo": "condiments", "soy sauce": "condiments", "vinegar": "condiments",
+    "hot sauce": "condiments", "sriracha": "condiments", "bbq sauce": "condiments",
+    "barbecue sauce": "condiments", "worcestershire": "condiments",
+    "fish sauce": "condiments", "oyster sauce": "condiments", "hoisin": "condiments",
+    "teriyaki": "condiments", "salsa": "condiments", "pesto": "condiments",
+    "tahini": "condiments", "miso": "condiments", "ranch": "condiments",
+    "relish": "condiments", "jam": "condiments", "jelly": "condiments",
+    "peanut butter": "condiments", "almond butter": "condiments",
+    # Beverages
+    "water": "beverages", "wine": "beverages", "beer": "beverages",
+    "broth": "beverages", "stock": "beverages", "chicken broth": "beverages",
+    "beef broth": "beverages", "vegetable broth": "beverages",
+    "juice": "beverages", "lemon juice": "beverages", "lime juice": "beverages",
+    "orange juice": "beverages", "apple cider": "beverages",
+    "coconut milk": "beverages", "almond milk": "beverages",
+    "coffee": "beverages", "tea": "beverages", "espresso": "beverages",
+    # Frozen
+    "frozen pea": "frozen", "frozen corn": "frozen", "frozen spinach": "frozen",
+    "frozen berry": "frozen", "ice cream": "frozen", "frozen vegetable": "frozen",
+}
+
+
+def _keyword_categorize(name: str) -> str:
+    """Deterministic category lookup by keyword matching. Returns 'other' if no match."""
+    lower = name.lower().strip()
+    # Try exact match first
+    if lower in _KEYWORD_CATEGORIES:
+        return _KEYWORD_CATEGORIES[lower]
+    # Try substring match (longest key first for specificity)
+    for keyword, cat in sorted(_KEYWORD_CATEGORIES.items(), key=lambda x: -len(x[0])):
+        if keyword in lower:
+            return cat
+    return "other"

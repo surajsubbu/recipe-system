@@ -95,6 +95,7 @@ export const recipesApi = {
       page_size?: number;
       search?: string;
       tag?: string;
+      cuisine?: string;
     },
     token: string | null
   ): Promise<PaginatedRecipes> => {
@@ -103,6 +104,7 @@ export const recipesApi = {
     if (params.page_size) qs.set("page_size", String(params.page_size));
     if (params.search) qs.set("search", params.search);
     if (params.tag) qs.append("tags", params.tag);  // backend expects "tags" query param
+    if (params.cuisine) qs.set("cuisine", params.cuisine);
     return apiFetch<PaginatedRecipes>(
       `/recipes${qs.toString() ? `?${qs}` : ""}`,
       token
@@ -114,6 +116,9 @@ export const recipesApi = {
 
   tags: (token: string | null): Promise<Tag[]> =>
     apiFetch<Tag[]>("/recipes/tags", token),
+
+  cuisines: (token: string | null): Promise<{ cuisine: string; count: number }[]> =>
+    apiFetch<{ cuisine: string; count: number }[]>("/recipes/cuisines", token),
 
   create: (data: RecipeCreate, token: string | null): Promise<Recipe> =>
     apiFetch<Recipe>("/recipes", token, {
@@ -159,11 +164,16 @@ export const shoppingApi = {
 
   generateFromRecipe: (
     recipeId: number,
-    token: string | null
-  ): Promise<ShoppingList> =>
-    apiFetch<ShoppingList>(`/shopping-list/generate/${recipeId}`, token, {
+    token: string | null,
+    excludeIds?: number[]
+  ): Promise<ShoppingList> => {
+    const qs = excludeIds && excludeIds.length > 0
+      ? `?${excludeIds.map((id) => `exclude_ids=${id}`).join("&")}`
+      : "";
+    return apiFetch<ShoppingList>(`/shopping-list/generate/${recipeId}${qs}`, token, {
       method: "POST",
-    }),
+    });
+  },
 
   updateItem: (
     itemId: number,
@@ -182,6 +192,11 @@ export const shoppingApi = {
 
   clearChecked: (token: string | null): Promise<ShoppingList> =>
     apiFetch<ShoppingList>("/shopping-list/clear-checked", token, {
+      method: "DELETE",
+    }),
+
+  clearAll: (token: string | null): Promise<void> =>
+    apiFetch<void>("/shopping-list/clear", token, {
       method: "DELETE",
     }),
 };

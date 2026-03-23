@@ -33,6 +33,7 @@ export interface Ingredient {
   unit: string | null;
   normalized_name: string | null;
   category: IngredientCategory | null;
+  section: string | null;
 }
 
 export interface Step {
@@ -40,6 +41,8 @@ export interface Step {
   order: number;
   instruction: string;
   timer_seconds: number | null;
+  video_timestamp_seconds: number | null;
+  section: string | null;
 }
 
 export interface Recipe {
@@ -47,6 +50,7 @@ export interface Recipe {
   title: string;
   description: string | null;
   source_url: string | null;
+  secondary_source_url: string | null;
   image_url: string | null;
   prep_time_minutes: number | null;
   cook_time_minutes: number | null;
@@ -67,6 +71,8 @@ export interface RecipeSummary {
   id: number;
   title: string;
   description: string | null;
+  source_url: string | null;
+  secondary_source_url: string | null;
   image_url: string | null;
   prep_time_minutes: number | null;
   cook_time_minutes: number | null;

@@ -46,7 +46,8 @@ const config: Config = {
         safe: "env(safe-area-inset-bottom, 0px)",
       },
       fontFamily: {
-        sans: ["var(--font-inter)", "system-ui", "sans-serif"],
+        sans:    ["var(--font-body)", "'IBM Plex Sans'", "system-ui", "sans-serif"],
+        heading: ["var(--font-heading)", "'Barlow Condensed'", "sans-serif"],
       },
     },
   },

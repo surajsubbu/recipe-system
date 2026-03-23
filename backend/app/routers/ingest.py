@@ -70,7 +70,7 @@ async def start_ingest(
         logger.exception("Failed to enqueue ingest job")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to enqueue job: {exc}",
+            detail="Failed to enqueue job. Please try again.",
         )
 
 
@@ -125,5 +125,5 @@ async def get_ingest_status(
         logger.exception("Error fetching job status for %s", job_id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Could not fetch job status: {exc}",
+            detail="Could not retrieve job status. Please try again.",
         )

@@ -19,19 +19,15 @@ export function LoadingSpinner({
   className,
   label = "Loading…",
 }: LoadingSpinnerProps) {
+  const textSizeMap = { sm: "text-sm", md: "text-base", lg: "text-2xl" };
   return (
     <div
       role="status"
-      className={cn("flex flex-col items-center justify-center gap-3", className)}
+      className={cn("flex items-center justify-center gap-1 font-heading uppercase tracking-widest text-muted-foreground", textSizeMap[size], className)}
     >
-      <div
-        className={cn(
-          "animate-spin rounded-full border-primary/30 border-t-primary",
-          sizeMap[size]
-        )}
-        aria-hidden="true"
-      />
-      {label && <span className="sr-only">{label}</span>}
+      <span>{label.replace("…", "")}</span>
+      <span className="cursor-blink" aria-hidden="true" />
+      <span className="sr-only">{label}</span>
     </div>
   );
 }

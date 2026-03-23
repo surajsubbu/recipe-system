@@ -2,24 +2,24 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ─── CSS custom properties (dark theme tokens) ────────────────────────────── */
+/* ─── CSS custom properties — Late Night Kitchen ────────────────────────────── */
 :root {
-  --background:         220 13% 10%;   /* gray-950  */
-  --foreground:         210 40% 98%;   /* gray-50   */
-  --card:               220 13% 14%;   /* gray-900  */
-  --card-foreground:    210 40% 98%;
-  --border:             217 19% 20%;   /* gray-800  */
-  --input:              217 19% 20%;
-  --primary:            25 95% 53%;    /* orange-500 — cook / CTA colour */
-  --primary-foreground: 0 0% 100%;
-  --muted:              217 19% 20%;
-  --muted-foreground:   215 16% 57%;   /* gray-400  */
-  --accent:             217 33% 17%;
-  --destructive:        0 84% 60%;     /* red-500   */
-  --radius:             0.625rem;
-  --success:            142 71% 45%;   /* green-500 */
-  --success-foreground: 0 0% 100%;
-  --warning:            45 93% 47%;    /* yellow-500 */
+  --background:         240 6% 5%;    /* #0d0d0e — near-black cold steel */
+  --foreground:         0 0% 91%;     /* #e8e8e8 — warm light gray */
+  --card:               240 5% 8%;    /* #141416 — dark panel */
+  --card-foreground:    0 0% 91%;
+  --border:             240 5% 18%;   /* #2a2a2e — cold dark border */
+  --input:              240 5% 12%;   /* #1e1e21 — input background */
+  --primary:            152 100% 50%; /* #00ff80 — neon kitchen green */
+  --primary-foreground: 0 0% 0%;      /* black on neon */
+  --muted:              240 5% 12%;   /* #1e1e21 */
+  --muted-foreground:   240 6% 57%;   /* #888899 — cool muted */
+  --accent:             240 5% 14%;   /* #202023 — hover surface */
+  --destructive:        0 100% 63%;   /* #ff4444 — alert red */
+  --radius:             0.375rem;     /* tighter corners */
+  --success:            152 100% 50%; /* matches primary */
+  --success-foreground: 0 0% 0%;
+  --warning:            45 93% 47%;
   --warning-foreground: 0 0% 10%;
 }
 
@@ -38,9 +38,22 @@
 
   body {
     @apply bg-background text-foreground antialiased;
-    font-family: var(--font-inter, system-ui, sans-serif);
+    font-family: var(--font-body, 'IBM Plex Sans', system-ui, sans-serif);
     /* Account for iOS home bar on standalone PWA */
     padding-bottom: env(safe-area-inset-bottom, 0px);
+    /* Subtle scanline texture — industrial stainless steel effect */
+    background-image: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      hsl(var(--border) / 0.04) 2px,
+      hsl(var(--border) / 0.04) 3px
+    );
+  }
+
+  h1, h2 {
+    font-family: var(--font-heading, 'Barlow Condensed', sans-serif);
+    @apply uppercase tracking-wide;
   }
 
   /* WCAG 2.5.5 — minimum 44 × 44 px interactive targets */
@@ -95,6 +108,28 @@
   /* Safe area top padding (notch) */
   .pt-safe {
     padding-top: env(safe-area-inset-top, 0px);
+  }
+
+  /* Neon glow — use on primary CTAs */
+  .glow-primary {
+    box-shadow: 0 0 18px hsl(var(--primary) / 0.4), 0 0 6px hsl(var(--primary) / 0.25);
+  }
+  .glow-primary:hover {
+    box-shadow: 0 0 24px hsl(var(--primary) / 0.55), 0 0 8px hsl(var(--primary) / 0.35);
+  }
+
+  /* Blinking block cursor — replaces spinner */
+  @keyframes cursor-blink {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0; }
+  }
+  .cursor-blink {
+    display: inline-block;
+    width: 0.55em;
+    height: 1.1em;
+    vertical-align: text-bottom;
+    background-color: hsl(var(--primary));
+    animation: cursor-blink 1s step-end infinite;
   }
 
   /* slide-up sheet animation */

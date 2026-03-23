@@ -86,6 +86,7 @@ class Recipe(Base):
     title                = Column(String(500), nullable=False, index=True)
     description          = Column(Text)
     source_url           = Column(String(2048))
+    secondary_source_url = Column(String(2048), nullable=True)  # e.g. blog link from YouTube description
     image_url            = Column(String(2048))
     prep_time_minutes    = Column(Integer)
     cook_time_minutes    = Column(Integer)
@@ -117,6 +118,7 @@ class Ingredient(Base):
     unit            = Column(String(100))
     normalized_name = Column(String(500))
     category        = Column(String(100))   # grocery category (produce, dairy, …)
+    section         = Column(String(255), nullable=True)  # recipe section (e.g. "For the Crust")
 
     recipe: Optional["Recipe"] = relationship("Recipe", back_populates="ingredients")
 
@@ -124,11 +126,13 @@ class Ingredient(Base):
 class Step(Base):
     __tablename__ = "steps"
 
-    id            = Column(Integer, primary_key=True, index=True)
-    recipe_id     = Column(Integer, ForeignKey("recipes.id", ondelete="CASCADE"), nullable=False, index=True)
-    order         = Column(Integer, nullable=False)
-    instruction   = Column(Text, nullable=False)
-    timer_seconds = Column(Integer)
+    id                      = Column(Integer, primary_key=True, index=True)
+    recipe_id               = Column(Integer, ForeignKey("recipes.id", ondelete="CASCADE"), nullable=False, index=True)
+    order                   = Column(Integer, nullable=False)
+    instruction             = Column(Text, nullable=False)
+    timer_seconds           = Column(Integer)
+    video_timestamp_seconds = Column(Integer, nullable=True)
+    section                 = Column(String(255), nullable=True)  # recipe section (e.g. "For the Crust")
 
     recipe: Optional["Recipe"] = relationship("Recipe", back_populates="steps")
 

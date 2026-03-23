@@ -30,6 +30,7 @@ class IngredientData:
     name: str
     amount: Optional[float] = None
     unit: Optional[str] = None
+    section: Optional[str] = None
 
 
 @dataclass
@@ -37,6 +38,8 @@ class StepData:
     order: int
     instruction: str
     timer_seconds: Optional[int] = None
+    video_timestamp_seconds: Optional[int] = None
+    section: Optional[str] = None
 
 
 @dataclass
@@ -44,10 +47,12 @@ class RecipeData:
     title: str
     description: Optional[str] = None
     source_url: Optional[str] = None
+    secondary_source_url: Optional[str] = None
     image_url: Optional[str] = None
     cook_time: Optional[int] = None   # minutes
     prep_time: Optional[int] = None   # minutes
     servings: Optional[int] = None
+    cuisine: Optional[str] = None
     transcript: Optional[str] = None   # video transcript (YouTube recipes)
     ingredients: list[IngredientData] = field(default_factory=list)
     steps: list[StepData] = field(default_factory=list)
@@ -164,6 +169,7 @@ def from_structured(data: dict[str, Any], source_url: str = "") -> RecipeData:
         if inst
     ]
 
+    raw_cuisine = data.get("cuisine")
     return RecipeData(
         title=data.get("title") or "Untitled Recipe",
         description=data.get("description"),
@@ -172,6 +178,7 @@ def from_structured(data: dict[str, Any], source_url: str = "") -> RecipeData:
         cook_time=data.get("cook_time"),
         prep_time=data.get("prep_time"),
         servings=_parse_servings(data.get("yields")),
+        cuisine=raw_cuisine.strip().title() if raw_cuisine else None,
         ingredients=parsed_ingredients,
         steps=steps,
         tags=[t.lower().strip() for t in (data.get("tags") or []) if t],
@@ -192,25 +199,46 @@ Return ONLY a valid JSON object with this exact schema:
   "prep_time": 15,
   "servings": 4,
   "ingredients": [
-    { "name": "all-purpose flour", "amount": 2.0, "unit": "cups" },
-    { "name": "salt",              "amount": 1.0, "unit": "tsp"  },
-    { "name": "vanilla extract",   "amount": null, "unit": null  }
+    { "name": "all-purpose flour", "amount": 2.0, "unit": "cups", "section": "For the Crust" },
+    { "name": "salt",              "amount": 1.0, "unit": "tsp",  "section": "For the Crust" },
+    { "name": "vanilla extract",   "amount": null, "unit": null,  "section": "For the Filling" }
   ],
   "steps": [
-    { "order": 1, "instruction": "Preheat oven to 175°C (350°F).", "timer_seconds": null },
-    { "order": 2, "instruction": "Mix flour and salt together.",   "timer_seconds": null },
-    { "order": 3, "instruction": "Bake for 25 minutes.",           "timer_seconds": 1500 }
+    { "order": 1, "instruction": "Preheat oven to 175°C (350°F).", "timer_seconds": null, "video_timestamp_seconds": null, "section": "For the Crust" },
+    { "order": 2, "instruction": "Mix flour and salt together.",   "timer_seconds": null, "video_timestamp_seconds": null, "section": "For the Crust" },
+    { "order": 3, "instruction": "Bake for 25 minutes.",           "timer_seconds": 1500, "video_timestamp_seconds": null, "section": "For the Filling" }
   ],
-  "tags": ["baking", "dessert", "vegetarian"]
+  "cuisine": "Italian",
+  "tags": ["lentils", "spinach", "dinner", "one-pot", "vegan"]
 }
 
 Rules:
 - amount must be a number (float) or null — never a string like "to taste"
 - timer_seconds: set ONLY when the step mentions an explicit duration \
   (e.g. "bake 25 min" → 1500, "simmer for 10 minutes" → 600), otherwise null
-- tags: 1–5 lowercase culinary descriptors
+- video_timestamp_seconds: map each step to the EARLIEST timestamp in the \
+  transcript where that action begins. When the source text contains timestamps \
+  in the format "[Ns] text" (e.g. "[120s] now we'll make the crust"), set this \
+  to the integer seconds. Timestamps carry across sections — e.g. if the crust \
+  section starts at 120s and the filling at 300s, use those values. \
+  Example: "[120s] now we'll make the crust" → video_timestamp_seconds: 120. \
+  If no timestamps are present, set to null
+- section: when the recipe has multiple parts (e.g. a pie with crust + filling, \
+  or a dish with sauce + main), set section to a descriptive label like \
+  "For the Crust", "For the Filling", "For the Sauce". If the recipe has \
+  only one part, set section to null for all ingredients and steps
+- cuisine: the cuisine style (e.g. "Italian", "Mexican", "Japanese", "Indian", "American") or null if unclear
+- tags: 3–10 lowercase tags covering: (a) the 2–3 key ingredients \
+  (e.g. "lentils", "spinach", "tofu", "chicken", "chickpeas"), \
+  (b) meal type (e.g. "dinner", "breakfast", "dessert", "snack", "side-dish"), \
+  (c) cooking method if notable (e.g. "one-pot", "baked", "grilled", "no-cook", \
+  "air-fryer", "slow-cooker"), (d) dietary labels only if clearly evident from \
+  the text (e.g. "vegan", "vegetarian", "gluten-free"). \
+  Never use generic words like "recipe", "food", "dish", "cooking"
 - If the text contains no clear recipe, still return your best attempt \
   with whatever information is available
+- Always output in English regardless of the input language — translate \
+  titles, descriptions, ingredient names, and step instructions if needed
 - Return ONLY the JSON — no prose, no markdown fences
 """
 
@@ -324,11 +352,13 @@ def _dict_to_recipe_data(data: dict[str, Any], source_url: str) -> RecipeData:
         if not name:
             continue
         amount_raw = item.get("amount")
+        section_raw = item.get("section")
         ingredients.append(
             IngredientData(
                 name=name,
                 amount=float(amount_raw) if amount_raw is not None else None,
                 unit=item.get("unit"),
+                section=section_raw if section_raw else None,
             )
         )
 
@@ -340,14 +370,19 @@ def _dict_to_recipe_data(data: dict[str, Any], source_url: str) -> RecipeData:
         if not instruction:
             continue
         timer_raw = item.get("timer_seconds")
+        vts_raw = item.get("video_timestamp_seconds")
+        section_raw = item.get("section")
         steps.append(
             StepData(
                 order=item.get("order") or len(steps) + 1,
                 instruction=instruction,
                 timer_seconds=int(timer_raw) if timer_raw else None,
+                video_timestamp_seconds=int(vts_raw) if vts_raw else None,
+                section=section_raw if section_raw else None,
             )
         )
 
+    raw_cuisine = data.get("cuisine")
     return RecipeData(
         title=(data.get("title") or "Imported Recipe").strip(),
         description=data.get("description"),
@@ -356,7 +391,64 @@ def _dict_to_recipe_data(data: dict[str, Any], source_url: str) -> RecipeData:
         cook_time=data.get("cook_time"),
         prep_time=data.get("prep_time"),
         servings=_parse_servings(data.get("servings")),
+        cuisine=raw_cuisine.strip().title() if raw_cuisine else None,
         ingredients=ingredients,
         steps=steps,
         tags=[t.lower().strip() for t in (data.get("tags") or []) if t],
     )
+
+
+# ─── Dietary tag classifier ────────────────────────────────────────────────────
+
+# Ingredient name substrings that indicate non-vegan condiments/extras that may
+# fall into "pantry" or "condiments" rather than "meat"/"seafood"/"dairy".
+_NON_VEGAN_NAME_FRAGMENTS = frozenset({
+    "gelatin", "lard", "tallow", "suet",
+    "anchov", "fish sauce", "oyster sauce",
+})
+
+
+def apply_dietary_tags(recipe_data: "RecipeData", norm_map: dict) -> None:
+    """
+    Deterministically add or remove vegan/vegetarian tags based on the
+    normalised ingredient list produced by normalizer_agent.
+
+    Must be called AFTER normalisation so norm_map is populated.
+    Modifies recipe_data.tags in-place.
+    """
+    if not norm_map:
+        return
+
+    categories = {r.category for r in norm_map.values()}
+    names      = {r.normalized_name for r in norm_map.values()}
+
+    has_meat    = "meat"    in categories
+    has_seafood = "seafood" in categories
+    has_dairy   = "dairy"   in categories
+    has_eggs    = any(n == "egg" or n.startswith("egg ") for n in names)
+    has_honey   = "honey" in names
+    has_non_vegan_extra = any(
+        fragment in name
+        for name in names
+        for fragment in _NON_VEGAN_NAME_FRAGMENTS
+    )
+
+    is_vegetarian = not has_meat and not has_seafood
+    is_vegan      = (
+        is_vegetarian
+        and not has_dairy
+        and not has_eggs
+        and not has_honey
+        and not has_non_vegan_extra
+    )
+
+    tags = set(recipe_data.tags)
+    # Strip any LLM-generated dietary labels — replace with verified ones
+    tags -= {"vegan", "vegetarian", "non-vegetarian"}
+
+    if is_vegan:
+        tags.update({"vegan", "vegetarian"})  # vegan ⊂ vegetarian
+    elif is_vegetarian:
+        tags.add("vegetarian")
+
+    recipe_data.tags = sorted(tags)

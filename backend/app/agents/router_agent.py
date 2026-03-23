@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 
 class URLType(str, Enum):
     youtube    = "youtube"
+    instagram  = "instagram"
     web_recipe = "web_recipe"
     unknown    = "unknown"
 
@@ -41,6 +42,15 @@ _YOUTUBE_PATHS = re.compile(
     r"^/(watch|shorts|embed|live|clip|v)/|^/@.+/",
     re.IGNORECASE,
 )
+
+
+# ─── Known Instagram domains ──────────────────────────────────────────────────
+
+_INSTAGRAM_DOMAINS = frozenset({
+    "instagram.com", "www.instagram.com", "m.instagram.com", "instagr.am",
+})
+
+_INSTAGRAM_PATHS = re.compile(r"^/(p|reel|reels|tv|stories)/", re.IGNORECASE)
 
 
 # ─── Main classifier ──────────────────────────────────────────────────────────
@@ -72,6 +82,13 @@ def classify_url(url: str) -> URLType:
     if parsed.netloc.lower() in _YOUTUBE_DOMAINS:
         logger.info("[router] YouTube URL detected: %s", url)
         return URLType.youtube
+
+    # ── Instagram ─────────────────────────────────────────────────────────────
+    if parsed.netloc.lower() in _INSTAGRAM_DOMAINS:
+        if _INSTAGRAM_PATHS.match(parsed.path):
+            logger.info("[router] Instagram URL detected: %s", url)
+            return URLType.instagram
+        # Profile/explore pages fall through to web_recipe (will fail gracefully)
 
     # ── Any other valid http(s) URL ───────────────────────────────────────────
     if parsed.scheme in ("http", "https") and parsed.netloc:

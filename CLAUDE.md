@@ -346,3 +346,21 @@ No automated test suite currently in the repo. Manual testing:
 ## Deployment
 
 See README.md for Cloudflare Tunnel setup (HTTPS from anywhere). The `.env` file should never be committed; all secrets come from environment variables at deploy time.
+
+## Frontend Aesthetics
+
+Avoid generic "AI slop" design. Every frontend change should feel genuinely designed for this context — a cooking/recipe app — not like a default template.
+
+**Typography:** Pick fonts that are beautiful and distinctive. Avoid Inter, Roboto, Arial, Space Grotesk, and other overused defaults. Consider editorial food aesthetics: serif/sans pairings like Playfair Display + DM Mono, Instrument Serif + Space Mono, or similar.
+
+**Color & Theme:** Commit to a strong, cohesive palette. Dominant color with sharp accent beats a timid, evenly-distributed scheme. Use CSS variables for consistency. Draw from IDE themes, culinary culture, food editorial design.
+
+**Motion:** CSS-only where possible; Motion library for React when available. Prioritise high-impact moments — one well-orchestrated page load with staggered reveals beats scattered micro-interactions.
+
+**Backgrounds:** Create atmosphere and depth. Layer CSS gradients, geometric patterns, or contextual effects rather than defaulting to flat solid colors.
+
+**Avoid:**
+- Generic font families (Inter, Roboto, Arial, system-ui, Space Grotesk)
+- Purple gradients on white
+- Predictable layouts and cookie-cutter component patterns
+- Timid, evenly-distributed palettes with no dominant color

@@ -11,7 +11,7 @@ import { ServingsScaler } from "@/components/ServingsScaler";
 import { IngredientChecklist } from "@/components/IngredientChecklist";
 import { StepTimer } from "@/components/StepTimer";
 import { PageSpinner } from "@/components/LoadingSpinner";
-import { cn, formatCookTime, formatDate, totalTime, convertUnit, type UnitSystem } from "@/lib/utils";
+import { cn, formatCookTime, formatDate, totalTime, convertUnit, isYouTubeUrl, getYouTubeVideoId, isInstagramUrl, isIngredientStaple, type UnitSystem } from "@/lib/utils";
 import {
   ArrowLeftIcon,
   ClockIcon,
@@ -41,6 +41,8 @@ export default function RecipeDetailPage() {
   const [deleting, setDeleting] = useState(false);
   const [mealModalOpen, setMealModalOpen] = useState(false);
   const [saveSheetOpen, setSaveSheetOpen] = useState(false);
+  const [inShoppingList, setInShoppingList] = useState(false);
+  const [inMealPlan, setInMealPlan] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -63,7 +65,11 @@ export default function RecipeDetailPage() {
   async function addToShopping() {
     try {
       const token = await getToken();
-      await shoppingApi.generateFromRecipe(Number(id), token);
+      const stapleIds = recipe?.ingredients
+        .filter(isIngredientStaple)
+        .map((i) => i.id) ?? [];
+      await shoppingApi.generateFromRecipe(Number(id), token, stapleIds);
+      setInShoppingList(true);
       showToast("Added to shopping list!");
     } catch {
       showToast("Failed to add to shopping list.");
@@ -132,8 +138,44 @@ export default function RecipeDetailPage() {
         </button>
       </div>
 
-      {/* Hero image */}
-      {recipe.image_url && (
+      {/* Hero: YouTube embed, Instagram thumbnail+link, or plain image */}
+      {recipe.source_url && isYouTubeUrl(recipe.source_url) ? (
+        <div className="relative aspect-video w-full overflow-hidden bg-black">
+          <iframe
+            src={`https://www.youtube.com/embed/${getYouTubeVideoId(recipe.source_url)}`}
+            title={recipe.title}
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+            className="absolute inset-0 h-full w-full"
+          />
+        </div>
+      ) : recipe.source_url && isInstagramUrl(recipe.source_url) && recipe.image_url ? (
+        <a
+          href={recipe.source_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="group relative block aspect-video w-full overflow-hidden bg-black"
+          aria-label="Watch on Instagram"
+        >
+          <Image
+            src={recipe.image_url}
+            alt={recipe.title}
+            fill
+            priority
+            className="object-cover opacity-80 transition-opacity group-hover:opacity-60"
+            sizes="(max-width: 672px) 100vw, 672px"
+          />
+          {/* Instagram play overlay */}
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-black/50 backdrop-blur-sm ring-2 ring-white/30 transition-transform group-hover:scale-110">
+              <PlayIcon className="h-7 w-7 translate-x-0.5 text-white" aria-hidden="true" />
+            </div>
+            <span className="rounded-full bg-black/50 px-3 py-1 text-xs font-semibold text-white backdrop-blur-sm">
+              Watch on Instagram
+            </span>
+          </div>
+        </a>
+      ) : recipe.image_url ? (
         <div className="relative aspect-video w-full overflow-hidden bg-muted">
           <Image
             src={recipe.image_url}
@@ -144,7 +186,7 @@ export default function RecipeDetailPage() {
             sizes="(max-width: 672px) 100vw, 672px"
           />
         </div>
-      )}
+      ) : null}
 
       <div className="px-safe px-4 py-5">
         {/* Title & meta */}
@@ -211,17 +253,27 @@ export default function RecipeDetailPage() {
         <div className="mb-6 grid grid-cols-2 gap-2">
           <button
             onClick={addToShopping}
-            className="flex min-h-touch flex-col items-center justify-center gap-1 rounded-xl border border-border bg-card p-3 text-xs font-medium text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary"
+            className={cn(
+              "flex min-h-touch flex-col items-center justify-center gap-1 rounded-xl border p-3 text-xs font-medium transition-colors",
+              inShoppingList
+                ? "border-orange-500/40 bg-orange-500/10 text-orange-400"
+                : "border-border bg-card text-muted-foreground hover:border-primary/50 hover:text-primary"
+            )}
           >
             <ShoppingCartIcon className="h-5 w-5" aria-hidden="true" />
-            Add to List
+            {inShoppingList ? "In List ✓" : "Add to List"}
           </button>
           <button
             onClick={() => setMealModalOpen(true)}
-            className="flex min-h-touch flex-col items-center justify-center gap-1 rounded-xl border border-border bg-card p-3 text-xs font-medium text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary"
+            className={cn(
+              "flex min-h-touch flex-col items-center justify-center gap-1 rounded-xl border p-3 text-xs font-medium transition-colors",
+              inMealPlan
+                ? "border-orange-500/40 bg-orange-500/10 text-orange-400"
+                : "border-border bg-card text-muted-foreground hover:border-primary/50 hover:text-primary"
+            )}
           >
             <CalendarIcon className="h-5 w-5" aria-hidden="true" />
-            Meal Plan
+            {inMealPlan ? "Planned ✓" : "Meal Plan"}
           </button>
           <button
             onClick={() => setSaveSheetOpen(true)}
@@ -232,7 +284,7 @@ export default function RecipeDetailPage() {
           </button>
           <Link
             href={`/cook/${id}`}
-            className="flex min-h-touch flex-col items-center justify-center gap-1 rounded-xl bg-primary p-3 text-xs font-medium text-primary-foreground"
+            className="glow-primary flex min-h-touch flex-col items-center justify-center gap-1 rounded-xl bg-primary p-3 font-heading text-xs font-semibold uppercase tracking-wider text-primary-foreground transition-all"
           >
             <PlayIcon className="h-5 w-5" aria-hidden="true" />
             Cook Mode
@@ -272,17 +324,32 @@ export default function RecipeDetailPage() {
           )}
         </div>
 
-        {/* Source link */}
-        {recipe.source_url && (
-          <a
-            href={recipe.source_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mb-6 flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary"
-          >
-            <GlobeAltIcon className="h-3.5 w-3.5" aria-hidden="true" />
-            View original source
-          </a>
+        {/* Source links */}
+        {(recipe.source_url || recipe.secondary_source_url) && (
+          <div className="mb-6 flex flex-wrap gap-x-4 gap-y-1">
+            {recipe.source_url && (
+              <a
+                href={recipe.source_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary"
+              >
+                <GlobeAltIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                {isYouTubeUrl(recipe.source_url) ? "Watch on YouTube" : isInstagramUrl(recipe.source_url) ? "Watch on Instagram" : "View original source"}
+              </a>
+            )}
+            {recipe.secondary_source_url && (
+              <a
+                href={recipe.secondary_source_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary"
+              >
+                <GlobeAltIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                Original Recipe
+              </a>
+            )}
+          </div>
         )}
 
         {/* Ingredients */}
@@ -306,24 +373,47 @@ export default function RecipeDetailPage() {
               Instructions
             </h2>
             <ol className="space-y-5">
-              {recipe.steps.map((step, i) => (
-                <li key={step.id} className="flex gap-4">
-                  <span
-                    className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground"
-                    aria-hidden="true"
-                  >
-                    {i + 1}
-                  </span>
-                  <div className="flex-1 space-y-2 pt-0.5">
-                    <p className="text-sm leading-relaxed text-foreground">
-                      {step.instruction}
-                    </p>
-                    {step.timer_seconds && (
-                      <StepTimer seconds={step.timer_seconds} />
+              {recipe.steps.map((step, i) => {
+                const prevSection = i > 0 ? recipe.steps[i - 1].section : null;
+                const showSectionHeader = step.section && step.section !== prevSection;
+                return (
+                  <li key={step.id}>
+                    {showSectionHeader && (
+                      <p className="mb-3 mt-2 text-sm font-bold text-foreground">
+                        {step.section}
+                      </p>
                     )}
-                  </div>
-                </li>
-              ))}
+                    <div className="flex gap-4">
+                      <span
+                        className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground"
+                        aria-hidden="true"
+                      >
+                        {i + 1}
+                      </span>
+                      <div className="flex-1 space-y-2 pt-0.5">
+                        <p className="text-sm leading-relaxed text-foreground">
+                          {step.instruction}
+                        </p>
+                        {step.timer_seconds && (
+                          <StepTimer seconds={step.timer_seconds} />
+                        )}
+                        {step.video_timestamp_seconds != null &&
+                          recipe.source_url &&
+                          isYouTubeUrl(recipe.source_url) && (
+                            <a
+                              href={`https://www.youtube.com/watch?v=${getYouTubeVideoId(recipe.source_url)}&t=${step.video_timestamp_seconds}s`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                            >
+                              ▶ Watch at {Math.floor(step.video_timestamp_seconds / 60)}:{String(step.video_timestamp_seconds % 60).padStart(2, "0")}
+                            </a>
+                          )}
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
             </ol>
           </section>
         )}
@@ -366,6 +456,7 @@ export default function RecipeDetailPage() {
           onClose={() => setMealModalOpen(false)}
           onAdded={() => {
             setMealModalOpen(false);
+            setInMealPlan(true);
             showToast("Added to meal plan!");
           }}
         />

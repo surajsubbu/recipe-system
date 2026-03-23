@@ -11,7 +11,7 @@ DELETE /shopping-list/clear-checked     → remove all checked items
 One active list per user — we always operate on the most recent one and
 create it automatically if it doesn't exist.
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -27,6 +27,24 @@ from app.schemas import (
 )
 
 router = APIRouter()
+
+
+# ─── Pluralization helper ──────────────────────────────────────────────────────
+
+def _singularize(name: str) -> str:
+    """Strip common English plural suffixes to normalize ingredient names for merging."""
+    lower = name.lower().strip()
+    if lower.endswith("ies") and len(lower) > 4:
+        return lower[:-3] + "y"  # berries -> berry
+    if lower.endswith("ves") and len(lower) > 4:
+        return lower[:-3] + "f"  # halves -> half
+    if lower.endswith("ses") or lower.endswith("ches") or lower.endswith("shes") or lower.endswith("xes") or lower.endswith("zes"):
+        return lower[:-2]  # tomatoes stays, but addresses -> address, etc.
+    if lower.endswith("oes") and len(lower) > 4:
+        return lower[:-2]  # tomatoes -> tomato, potatoes -> potato
+    if lower.endswith("s") and not lower.endswith("ss") and len(lower) > 3:
+        return lower[:-1]  # onions -> onion
+    return lower
 
 
 # ─── Helper: get-or-create the user's active shopping list ───────────────────
@@ -113,6 +131,7 @@ async def add_item(
 )
 async def generate_from_recipe(
     recipe_id: int,
+    exclude_ids: list[int] = Query(default=[]),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -131,17 +150,35 @@ async def generate_from_recipe(
 
     shopping_list = await _get_or_create_list(current_user, db)
 
+    # Build lookup for merging: (singularized_name, unit_lower) → existing item
+    existing_lookup: dict[tuple, ShoppingItem] = {}
+    for existing_item in shopping_list.items:
+        key = (_singularize(existing_item.name), (existing_item.unit or "").lower())
+        existing_lookup[key] = existing_item
+
+    exclude_set = set(exclude_ids)
     for ing in recipe.ingredients:
-        item = ShoppingItem(
-            list_id=shopping_list.id,
-            name=ing.normalized_name or ing.name,
-            amount=ing.amount,
-            unit=ing.unit,
-            checked=False,
-            category=ing.category or "other",
-            recipe_id=recipe.id,
-        )
-        db.add(item)
+        if ing.id in exclude_set:
+            continue
+        ing_name = ing.normalized_name or ing.name
+        key = (_singularize(ing_name), (ing.unit or "").lower())
+        match = existing_lookup.get(key)
+        if match is not None:
+            # Merge amounts when both are numeric; otherwise leave as-is
+            if match.amount is not None and ing.amount is not None:
+                match.amount = round(match.amount + ing.amount, 4)
+        else:
+            item = ShoppingItem(
+                list_id=shopping_list.id,
+                name=ing_name,
+                amount=ing.amount,
+                unit=ing.unit,
+                checked=False,
+                category=ing.category or "other",
+                recipe_id=recipe.id,
+            )
+            db.add(item)
+            existing_lookup[key] = item
 
     await db.flush()
 
@@ -205,3 +242,16 @@ async def clear_checked_items(
     for item in list(shopping_list.items):
         if item.checked:
             await db.delete(item)
+
+
+# ─── DELETE /shopping-list/clear ─────────────────────────────────────────────
+
+@router.delete("/clear", status_code=status.HTTP_204_NO_CONTENT)
+async def clear_all_items(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Remove all items from the user's active shopping list."""
+    shopping_list = await _get_or_create_list(current_user, db)
+    for item in list(shopping_list.items):
+        await db.delete(item)

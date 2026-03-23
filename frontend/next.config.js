@@ -35,6 +35,16 @@ const withPWA = require("@ducanh2912/next-pwa").default({
 const nextConfig = {
   reactStrictMode: true,
 
+  // Proxy /backend/* → backend container (avoids needing a second Cloudflare tunnel hostname)
+  async rewrites() {
+    return [
+      {
+        source: "/backend/:path*",
+        destination: "http://backend:8000/:path*",
+      },
+    ];
+  },
+
   // Allow images from any remote host (recipe images come from many domains)
   images: {
     remotePatterns: [

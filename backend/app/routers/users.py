@@ -116,5 +116,5 @@ async def invite_user(
         logger.error("Clerk invite failed: %s", exc)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Clerk API error: {exc.response.text}",
+            detail="Failed to send invitation. Please try again later.",
         )
