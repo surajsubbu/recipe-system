@@ -56,7 +56,32 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <ClerkProvider>
+    <ClerkProvider
+      appearance={{
+        // Theme every Clerk component (sign-in footer, user menu, modals) with
+        // the Late Night Kitchen palette — Clerk defaults to a light theme.
+        variables: {
+          colorBackground:              "#141416",
+          colorText:                    "#e8e8e8",
+          colorTextSecondary:           "#888899",
+          colorPrimary:                 "#00ff80",
+          colorTextOnPrimaryBackground: "#000000",
+          colorInputBackground:         "#1e1e21",
+          colorInputText:               "#e8e8e8",
+          colorNeutral:                 "#e8e8e8",
+          colorDanger:                  "#ff4444",
+          borderRadius:                 "0.375rem",
+          fontFamily:                   "var(--font-body), 'IBM Plex Sans', sans-serif",
+        },
+        elements: {
+          footer: "bg-card bg-none border-t border-border",
+        },
+        layout: {
+          // Dev keys are intentional for this self-hosted install
+          unsafe_disableDevelopmentModeWarnings: true,
+        },
+      }}
+    >
       {/*
         Dark mode is always active — we set the "dark" class here rather than
         toggling it at runtime, because the app is designed dark-only.
