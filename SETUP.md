@@ -1,17 +1,19 @@
 # Setup Guide
 
-Full instructions for running your own instance.
+Full instructions for running your own instance — on a Linux/Unraid server or on Windows with Docker Desktop.
 
 ---
 
 ## Prerequisites
 
-- **Windows 10/11** with WSL2 enabled
-- **Docker Desktop** ≥ 4.30 with WSL2 backend enabled
+- **Docker** with the Compose plugin (`docker compose version` should work)
+  - Linux / Unraid: Docker Engine ≥ 24
+  - Windows 10/11: Docker Desktop ≥ 4.30 with the WSL2 backend
 - **Git**
+- ~6 GB free disk for images, ~2 GB free RAM while running
 - A free [Clerk](https://clerk.com) account (auth)
-- A free [OpenRouter](https://openrouter.ai) account (AI models)
-- A free [Cloudflare](https://cloudflare.com) account with a domain (optional, for external access)
+- An [OpenRouter](https://openrouter.ai) account with a few dollars of credit (AI models)
+- A [Cloudflare](https://cloudflare.com) account with a domain (optional, for access from outside your network)
 
 ---
 
@@ -20,67 +22,70 @@ Full instructions for running your own instance.
 ### 1. Clone the repository
 
 ```bash
-git clone <your-repo-url> recipe-system
+# Unraid: keep it with your other app data
+cd /mnt/user/appdata
+git clone https://github.com/surajsubbu/recipe-system.git
 cd recipe-system
 ```
 
-### 2. Configure environment variables
-
-Edit `.env` to add your real keys:
+### 2. Create `.env` from the template
 
 ```bash
-notepad .env
+cp .env.example .env
+nano .env        # Windows: notepad .env
 ```
 
-**Required fields:**
+Fill in every `CHANGE_ME` value:
 
 | Variable | Where to get it |
 |---|---|
-| `CLERK_SECRET_KEY` | Clerk Dashboard → API Keys → Secret keys |
-| `CLERK_JWKS_URL` | Clerk Dashboard → API Keys → JWKS Endpoint URL |
-| `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | Clerk Dashboard → API Keys → Publishable key |
+| `CLERK_SECRET_KEY` | Clerk Dashboard → API Keys → Secret key (`sk_test_…`) |
+| `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | Clerk Dashboard → API Keys → Publishable key (`pk_test_…`) |
+| `CLERK_JWKS_URL` | Clerk Dashboard → API Keys → JWKS URL |
 | `OPENROUTER_API_KEY` | [openrouter.ai/keys](https://openrouter.ai/keys) |
-| `POSTGRES_PASSWORD` | Choose any strong password |
+| `POSTGRES_PASSWORD`, `FLOWER_PASSWORD`, `HA_WEBHOOK_SECRET` | Generate each with `openssl rand -hex 24` |
+| `NEXT_PUBLIC_BACKEND_URL` | `http://<server-ip>:8001` (see note below) |
+| `CORS_ORIGINS` | `http://<server-ip>:3001,http://localhost:3001` |
 
-**Optional fields:**
+> **Why the server IP?** Your *browser* talks to the backend directly. `localhost` only works in a browser running on the server itself — phones and laptops need the server's LAN address (or your public domain, see [Cloudflare Tunnel](#cloudflare-tunnel-external-access)).
 
-| Variable | Default | Description |
-|---|---|---|
-| `OPENROUTER_FAST_MODEL` | `openai/gpt-4o-mini` | Model for ingredient parsing (cheap) |
-| `OPENROUTER_SMART_MODEL` | `anthropic/claude-3.5-sonnet` | Model for recipe extraction |
-| `OPENROUTER_BALANCED_MODEL` | `google/gemini-flash-1.5` | Model for normalisation |
-| `WHISPER_MODEL_SIZE` | `small` | `tiny` / `base` / `small` / `medium` / `large` |
-| `OLLAMA_MODEL` | `llama3.2:7b` | Ollama model to pull on startup |
-| `FLOWER_PASSWORD` | `flowerpass` | Celery Flower UI password |
-| `CLOUDFLARE_TUNNEL_TOKEN` | — | From Cloudflare Zero Trust dashboard |
+> **Keep `POSTGRES_PASSWORD` stable.** The database takes its password once, when its volume is first created. Changing it later means the backend can't log in.
+
+The template's other values (AI models, Clerk redirect settings, Whisper size) are sensible defaults — see the comments in `.env.example`.
 
 ### 3. Set up Clerk
 
 1. Go to [dashboard.clerk.com](https://dashboard.clerk.com) → Create application
 2. Enable your preferred sign-in methods (Email, Google, etc.)
-3. Under **API Keys**, copy the three Clerk values into `.env`
+3. Stay on **Development** keys — they work on any address, including plain `http` on a LAN IP. Production keys require HTTPS on your own domain plus extra DNS records.
+4. Copy the three API Keys values into `.env`
 
-### 4. Start all services
+### 4. Start the app
 
 ```bash
-docker compose up -d
+docker compose up -d --build
 ```
 
-First run downloads images and builds containers — takes 3–5 minutes. Subsequent starts are instant.
+First run builds the images — about 5 minutes. This starts 7 containers: `postgres`, `redis`, `backend`, `celery_worker`, `celery_beat`, `flower`, `frontend`. Database migrations run automatically.
 
 ```bash
-# Watch logs
+docker compose ps                  # all should be "Up", most "(healthy)"
 docker compose logs -f backend
-docker compose logs -f celery_worker
+```
+
+The extras — `ollama` (local LLM), `n8n` (automation) and `cloudflared` (this repo's own tunnel) — are opt-in:
+
+```bash
+docker compose --profile optional up -d
 ```
 
 ### 5. Open the app
 
 | Service | URL |
 |---|---|
-| **App** | [http://localhost:3000](http://localhost:3000) |
-| **API docs** | [http://localhost:8000/docs](http://localhost:8000/docs) |
-| **Flower** | [http://localhost:5555](http://localhost:5555) |
+| **App** | `http://<server-ip>:3001` |
+| **API docs** | `http://<server-ip>:8001/docs` |
+| **Flower** (task monitor) | `http://<server-ip>:5555` — user `admin`, password `FLOWER_PASSWORD` |
 
 ---
 
@@ -101,78 +106,93 @@ docker compose exec postgres psql -U recipeuser -d recipes -c \
 
 ---
 
+## Where Your Data Lives
+
+- **Recipes, shopping lists, meal plans** → PostgreSQL, stored in the Docker volume `recipe-system_postgres_data` (under Docker's own directory, **not** in the repo folder).
+- **Recipe photos** are not downloaded — only the link to the original website is stored.
+- **Secrets** → `.env` in the repo folder. Back it up; it's the only copy of your database password.
+
+⚠️ Folder-based backup tools (e.g. Unraid's Appdata Backup) **do not** include Docker volumes. Export the database to a file they do include:
+
+```bash
+mkdir -p backups
+docker compose exec -T postgres pg_dump -U recipeuser -d recipes | gzip > backups/recipes-$(date +%F).sql.gz
+
+# Restore into a fresh install
+gunzip -c backups/recipes-YYYY-MM-DD.sql.gz | docker compose exec -T postgres psql -U recipeuser -d recipes
+```
+
+---
+
 ## Recommended AI Models
 
-| Tier | Env var | Suggested model | Use case |
+| Tier | Env var | Default in `.env.example` | Use case |
 |---|---|---|---|
-| Fast | `OPENROUTER_FAST_MODEL` | `google/gemini-flash-1.5` | Ingredient string parsing |
-| Smart | `OPENROUTER_SMART_MODEL` | `anthropic/claude-3.5-sonnet` | Full recipe extraction |
-| Balanced | `OPENROUTER_BALANCED_MODEL` | `mistralai/mistral-7b-instruct` | Ingredient normalisation |
+| Fast | `OPENROUTER_FAST_MODEL` | `google/gemini-2.5-flash-lite` | Ingredient string parsing |
+| Smart | `OPENROUTER_SMART_MODEL` | `anthropic/claude-sonnet-4.5` | Full recipe extraction |
+| Balanced | `OPENROUTER_BALANCED_MODEL` | `google/gemini-2.5-flash` | Ingredient normalisation |
 
-Any model from the [OpenRouter model list](https://openrouter.ai/models) works. Restart after changing:
+OpenRouter retires old model IDs over time. If recipe ingestion suddenly fails, check the IDs still exist at [openrouter.ai/models](https://openrouter.ai/models). Restart after changing:
 ```bash
-docker compose restart backend celery_worker
+docker compose up -d backend celery_worker
 ```
 
 ---
 
 ## Whisper Model Sizes
 
-Set `WHISPER_MODEL_SIZE` in `.env`:
+Set `WHISPER_MODEL_SIZE` in `.env` (speech-to-text for YouTube videos without captions):
 
-| Size | VRAM | Speed | Accuracy |
+| Size | RAM | Speed | Accuracy |
 |---|---|---|---|
 | `tiny` | ~1 GB | Very fast | Low |
-| `base` | ~1 GB | Fast | OK |
-| `small` | ~2 GB | Moderate | Good ✅ |
+| `base` | ~1 GB | Fast | OK ✅ (default — good for ≤8 GB servers) |
+| `small` | ~2 GB | Moderate | Good |
 | `medium` | ~5 GB | Slow | Better |
 | `large` | ~10 GB | Very slow | Best |
 
-`small` is the default and works well for English cooking videos.
+The worker runs 4 jobs at once, so budget for several copies of the model.
 
 ---
 
 ## Cloudflare Tunnel (External Access)
 
-To access your instance from anywhere without port forwarding:
+The browser needs to reach **both** the frontend and the backend, so the tunnel needs **two public hostnames**. You can use an existing tunnel (e.g. an Unraid cloudflared container) or this repo's `cloudflared` service.
 
-1. Sign in at [dash.cloudflare.com](https://dash.cloudflare.com) — add a domain
-2. **Zero Trust** → **Access** → **Tunnels** → **Create a tunnel**
-3. Copy the tunnel token into `.env`:
+1. Cloudflare **Zero Trust** → **Networks** → **Tunnels** → your tunnel (or **Create a tunnel**)
+2. Add two public hostnames (replace the IP with your server's):
+   | Hostname | Service |
+   |---|---|
+   | `recipe.example.com` | `HTTP` → `192.168.x.x:3001` |
+   | `recipe-api.example.com` | `HTTP` → `192.168.x.x:8001` |
+3. Update `.env`:
    ```
-   CLOUDFLARE_TUNNEL_TOKEN=eyJ...
+   NEXT_PUBLIC_BACKEND_URL=https://recipe-api.example.com
+   CORS_ORIGINS=https://recipe.example.com,http://192.168.x.x:3001,http://localhost:3001
    ```
-4. Add public hostnames in the tunnel config:
-   - `recipes.yourdomain.com` → `http://frontend:3000`
-   - `recipes-api.yourdomain.com` → `http://backend:8000` (optional)
-5. Update `NEXT_PUBLIC_BACKEND_URL` and `CORS_ORIGINS` in `.env` to use your domain
-6. Start the tunnel:
-   ```bash
-   docker compose up -d cloudflared
-   ```
+4. Apply: `docker compose up -d`
+5. Use `https://recipe.example.com` everywhere, including at home.
+
+**Using this repo's tunnel container instead:** put the tunnel token in `CLOUDFLARE_TUNNEL_TOKEN`, point the hostnames at `http://frontend:3001` and `http://backend:8000`, and run `docker compose --profile optional up -d cloudflared`.
+
+All recipe/shopping/meal-plan API routes require a signed-in user. Set `HA_WEBHOOK_SECRET` before exposing the backend, or the Home Assistant webhook is open.
 
 ---
 
 ## Common Commands
 
 ```bash
-# Start everything
-docker compose up -d
+docker compose up -d                  # start / apply .env changes
+docker compose down                   # stop (keeps data)
+docker compose up -d --build backend  # rebuild one service
+docker compose exec backend bash      # shell into a container
+curl http://localhost:8001/health     # backend health
 
-# Stop everything (keeps data)
-docker compose down
+# Update to the latest code
+git pull && docker compose up -d --build
 
-# Stop and wipe all data (destructive!)
+# ⚠️ Stop AND delete all data (recipes included)
 docker compose down -v
-
-# Rebuild a single service
-docker compose up -d --build backend
-
-# Enter a container
-docker compose exec backend bash
-
-# Check health
-curl http://localhost:8000/health
 ```
 
 ---
@@ -183,53 +203,57 @@ curl http://localhost:8000/health
 ```bash
 docker compose logs backend
 ```
+- **`/app/entrypoint.sh: permission denied`** — the script lost its executable bit (e.g. copied without git). Fix: `chmod +x backend/entrypoint.sh && docker compose up -d`
+- **`password authentication failed`** — `POSTGRES_PASSWORD` changed after the database was created. Restore the old value.
 - **"relation does not exist"** — run migrations: `docker compose exec backend alembic upgrade head`
-- **"could not connect to server"** — postgres isn't ready yet; wait 10s and retry
 - **"invalid JWKS"** — check `CLERK_JWKS_URL` in `.env`
 
-### Frontend shows 401 / infinite redirect
-- Confirm `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` matches your Clerk app
-- Check browser console for CORS errors — update `CORS_ORIGINS` in `.env`
+### Sign-in lands on a Clerk "Welcome… Start building" page
+You signed in on Clerk's hosted site instead of the app. Make sure the four `NEXT_PUBLIC_CLERK_SIGN_*` settings from `.env.example` are in `.env`, run `docker compose up -d frontend`, and open the app's own address.
 
-### Ingest job stays "pending"
+### Pages load but recipes don't / CORS errors in the browser console
+- `NEXT_PUBLIC_BACKEND_URL` must be reachable from the browser (not `localhost` on another device), and must be `https` if the app is opened over `https`.
+- The address in the browser bar must be listed in `CORS_ORIGINS`.
+- Apply with `docker compose up -d`.
+
+### Ingest job stays "pending" or fails
 ```bash
 docker compose logs celery_worker
 ```
+- Check the OpenRouter model IDs still exist and the account has credit
 - Restart worker: `docker compose restart celery_worker`
-- Check Flower at [http://localhost:5555](http://localhost:5555) for task details
+- Check Flower for task details
 
 ### YouTube ingest fails
 - The video may be age-restricted, private, or geo-blocked
 - Whisper fallback is automatic if captions aren't found
 - Very long videos (>2 hrs) may hit the task time limit
 
-### Out of disk space
-```bash
-docker system prune --volumes
-```
-⚠️ Removes all stopped containers and unused volumes — backup first if needed.
-
 ---
 
 ## Services
 
-| Service | Port | Description |
+| Service | Host port | Description |
 |---|---|---|
-| `frontend` | 3000 | Next.js app |
-| `backend` | 8000 | FastAPI REST API |
-| `postgres` | 5432 | Recipe database |
-| `redis` | 6379 | Celery broker |
+| `frontend` | 3001 | Next.js app |
+| `backend` | 8001 | FastAPI REST API |
+| `postgres` | 5433 | Recipe database |
+| `redis` | 6380 | Celery broker |
 | `celery_worker` | — | Background task runner |
 | `celery_beat` | — | Periodic task scheduler |
 | `flower` | 5555 | Task monitoring UI |
-| `ollama` | 11434 | Local LLM (optional) |
-| `cloudflared` | — | Cloudflare Tunnel (optional) |
+| `ollama` | 11434 | Local LLM (optional profile) |
+| `n8n` | 5678 | Automation (optional profile) |
+| `cloudflared` | — | Cloudflare Tunnel (optional profile) |
+
+Change the left-hand port numbers in `docker-compose.yml` if any clash with other services.
 
 ---
 
 ## Security Notes
 
-- `.env` contains real secrets — **never commit it to a public repo**
+- `.env` contains real secrets — **never commit it**. Only `.env.example` (placeholders) belongs in git.
 - `CLERK_SECRET_KEY` is backend-only, never sent to the browser
 - `NEXT_PUBLIC_*` variables are embedded in the browser bundle — only put non-sensitive values there
+- The frontend runs the Next.js development server (hot reload). It's fine at home; for a public deployment, a production build is faster and hides error details.
 - Rotate the Cloudflare Tunnel token from the dashboard if it's ever exposed

@@ -152,6 +152,7 @@ services:
   ollama:
     image: ollama/ollama:latest
     container_name: recipe_ollama
+    profiles: ["optional"]   # opt-in: docker compose --profile optional up -d
     restart: unless-stopped
     volumes:
       - ollama_data:/root/.ollama
@@ -191,6 +192,7 @@ services:
   n8n:
     image: n8nio/n8n:latest
     container_name: recipe_n8n
+    profiles: ["optional"]   # opt-in: docker compose --profile optional up -d
     restart: unless-stopped
     environment:
       N8N_BASIC_AUTH_ACTIVE: "true"
@@ -220,6 +222,7 @@ services:
   cloudflared:
     image: cloudflare/cloudflared:latest
     container_name: recipe_cloudflared
+    profiles: ["optional"]   # opt-in: docker compose --profile optional up -d
     restart: unless-stopped
     command: tunnel --no-autoupdate run
     environment:

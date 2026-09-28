@@ -65,6 +65,13 @@
     @apply min-h-touch min-w-touch;
   }
 
+  /* Inline text links inside Clerk widgets ("Sign up") — the 44px minimum
+     above pushes them onto their own line */
+  .cl-footerActionLink {
+    min-height: 0;
+    min-width: 0;
+  }
+
   /* Remove spinners from number inputs */
   input[type="number"]::-webkit-outer-spin-button,
   input[type="number"]::-webkit-inner-spin-button {
